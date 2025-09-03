@@ -118,17 +118,45 @@ python run_refactored_app.py  # 默认监听 8081
 - 鉴权可开关（`AUTH_ENABLED=false` 时以开发用户运行）
 - 列表分页 40 条，键集/游标分页优先，避免 `SELECT *`
 
-## 目录结构（后续补充）
+## 目录结构
 - `app/` Flask 应用代码
   - `__init__.py`（配置加载、DB与客户端初始化、蓝图注册）
   - `models.py`（SQLAlchemy ORM 模型）
-  - `views.py`（路由与页面）
+  - `views.py`（路由与页面 + 诊断接口 + SSE）
   - `auth.py`（鉴权开关与开发模式用户注入）
-  - `oss.py`（OSS 封装）
-  - `tts_client.py`（火山引擎 TTS v3 客户端与命名规则）
-  - `tasks.py`（有界线程池与TTS后台任务）
-- `templates/`（Jinja2 模板：layout/text_library/audio_library/upload_text）
+  - `oss.py`（OSS 封装：上传重试、路径规范化、安全公开 URL）
+  - `tts_client.py`（火山引擎 TTS v3 客户端、对话分配音色、命名规则）
+  - `tasks.py`（用户态线程池、后台任务执行，正确的应用上下文推送）
+  - `protocols.py`（TTS WebSocket 协议编解码、事件等待）
+  - `config/`
+    - `__init__.py`
+    - `settings.py`（配置对象与公开设置）
+    - `logging_config.py`（结构化日志、脱敏、内存缓冲）
+  - `infrastructure/`
+    - `__init__.py`
+    - `monitoring.py`（内存任务监控、SSE 推送、超时守护）
+  - `services/`
+    - `__init__.py`
+    - `audio_service.py`
+    - `task_service.py`（幂等与上传、DB 落盘、监控完成）
+    - `tts_service.py`（格式校验、重试、调用 TTS 客户端）
+- `templates/`（Jinja2 模板）
+  - `layout.html`
+  - `text_library.html`（文本资源库）
+  - `audio_library.html`（音频资源库）
+  - `upload_text.html`（上传与生成，带 SSE 与轮询降级）
 - `static/`（静态资源）
+  - `js/`
+    - `statusbar.js`（全局状态栏组件）
+- `docs/`
+  - `README.md`、`API_REFERENCE.md`、`ARCHITECTURE.md`、`DEVELOPMENT_GUIDE.md`、`CHANGELOG.md`
+  - `example_db_config.json`（配置示例，实际放置于项目父目录 `../db_config.json`）
+  - `scripts/`
+    - `deploy.sh`（无 sudo 用户态一键部署脚本）
+- `run_refactored_app.py`（开发启动入口，禁用 reloader）
+- `requirements.txt`
+- `schema.sql`（建库与索引）
+- `DEPLOY_NO_SUDO.md`（无 sudo 首次部署指南）
 
 ## 迁移与运维建议
 - 使用 Alembic 维护迁移脚本（向前兼容：加字段→双写→回填→切换→清理）
