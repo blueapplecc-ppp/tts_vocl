@@ -1,0 +1,44 @@
+{
+  "MYSQL": {
+    "HOST": "localhost",
+    "PORT": "3306",
+    "USER": "root",
+    "PASSWORD": "<set via external file>",
+    "DB": "tts_vocl",
+    "POOL_SIZE": "10",
+    "POOL_TIMEOUT": "5",
+    "POOL_RECYCLE": "1800"
+  },
+  "OSS": {
+    "ENDPOINT": "https://oss-cn-shanghai.aliyuncs.com",
+    "BUCKET": "<set via external file>",
+    "ACCESS_KEY_ID": "<set via external file>",
+    "ACCESS_KEY_SECRET": "<set via external file>"
+  },
+  "VOLC_TTS": {
+    "APP_ID": "<set via external file>",
+    "ACCESS_TOKEN": "<set via external file>",
+    "SECRET_KEY": "<set via external file>",
+    "API_BASE": "https://open.volcengineapi.com"
+  },
+  "JWT": {
+    "SECRET": "<set via external file>",
+    "EXPIRES_MINUTES": "120"
+  },
+  "AUTH_ENABLED": "false",
+  "GOOGLE_OAUTH": {
+    "CLIENT_ID": "<set via external file>",
+    "CLIENT_SECRET": "<set via external file>",
+    "REDIRECT_URI": "<set via external file>"
+  },
+  "FEISHU_OAUTH": {
+    "APP_ID": "<set via external file>",
+    "APP_SECRET": "<set via external file>",
+    "REDIRECT_URI": "<set via external file>"
+  },
+  "PROXY": {
+    "HTTP_PROXY": "",
+    "HTTPS_PROXY": "",
+    "ALL_PROXY": ""
+  }
+}
