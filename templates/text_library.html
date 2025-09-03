@@ -1,0 +1,73 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-lg font-semibold">文本资源库</h2>
+    <form class="flex items-center gap-2" method="get" action="/">
+      <input type="text" name="q" value="{{ q }}" placeholder="搜索标题/上传者" class="border rounded px-3 py-2" />
+      <select name="order" class="border rounded px-3 py-2">
+        <option value="desc" {% if order=='desc' %}selected{% endif %}>时间降序</option>
+        <option value="asc" {% if order=='asc' %}selected{% endif %}>时间升序</option>
+      </select>
+      <button class="px-4 py-2 bg-blue-600 text-white rounded">搜索</button>
+    </form>
+  </div>
+
+  <!-- 上半部分：文本列表 -->
+  <div class="bg-white border rounded p-4">
+    <div class="space-y-3">
+      {% for it in items %}
+      <div class="flex items-center justify-between p-3 border rounded">
+        <div class="flex items-center gap-3">
+          <div>
+            <div class="font-medium">
+              <a class="hover:underline" href="/?q={{ q }}&order={{ order }}&page={{ page }}&selected_id={{ it.id }}">{{ it.title }}</a>
+            </div>
+            <div class="text-sm text-gray-500">用户ID {{ it.user_id }} · {{ it.created_at }}</div>
+          </div>
+          <a class="text-blue-600 text-sm" href="{{ pub_url(it.oss_object_key) }}" download>下载文本</a>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap justify-end">
+          {% for a in audios_map.get(it.id, []) %}
+            <div class="flex items-center gap-2">
+              <audio controls class="h-8">
+                <source src="{{ pub_url(a.oss_object_key) }}" type="audio/mpeg" />
+              </audio>
+              <a class="text-blue-600 text-sm" href="{{ pub_url(a.oss_object_key) }}" download>下载</a>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- 分页 -->
+    <div class="mt-4 flex justify-end gap-2">
+      {% if page > 1 %}
+      <a class="px-3 py-1 border rounded" href="/?q={{ q }}&order={{ order }}&page={{ page-1 }}">上一页</a>
+      {% endif %}
+      <a class="px-3 py-1 border rounded" href="/?q={{ q }}&order={{ order }}&page={{ page+1 }}">下一页</a>
+    </div>
+  </div>
+
+  <!-- 下半部分：选中文本只读预览区 -->
+  <div class="bg-white border rounded p-4 min-h-[240px]">
+    <div class="text-sm text-gray-500 mb-2">选中文本预览（只读）</div>
+    {% if selected_text %}
+    <pre class="whitespace-pre-wrap text-sm">{{ selected_text.content }}</pre>
+    {% else %}
+    <pre class="whitespace-pre-wrap text-sm">（选择具体文本后展示）</pre>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function(){
+    if (window.AppStatusBar) {
+      AppStatusBar.update({event:'page_loaded', page:'text_library', q:'{{ q }}', order:'{{ order }}', pageNo:{{ page }} });
+      AppStatusBar.update({event:'query_done', items_count: {{ items|length }}, selected_id: '{{ selected_text and selected_text.id or "" }}' });
+    }
+  });
+</script>
+{% endblock %}

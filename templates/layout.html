@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TTS火山版 · TTS_VOCL</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-screen bg-gray-50 text-gray-900">
+  <div class="flex h-full">
+    <aside class="w-64 bg-white border-r border-gray-200 p-4">
+      <h1 class="text-xl font-bold mb-6">TTS火山版</h1>
+      <nav class="space-y-2">
+        <a href="/" class="block px-3 py-2 rounded hover:bg-gray-100">文本资源库</a>
+        <a href="/audios" class="block px-3 py-2 rounded hover:bg-gray-100">音频资源库</a>
+        <a href="/upload" class="block px-3 py-2 rounded hover:bg-gray-100">上传文本</a>
+        <a href="/settings" class="block px-3 py-2 rounded hover:bg-gray-100">系统设置</a>
+      </nav>
+    </aside>
+    <main class="flex-1 overflow-auto">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <!-- 全局状态栏容器 -->
+  <div id="app-status-bar" class="fixed bottom-0 left-0 right-0 bg-gray-800 text-gray-100 text-xs px-3 py-2 border-t border-gray-700 hidden" style="z-index:1000;">
+    <span class="font-semibold">状态</span>: 就绪
+  </div>
+  <script src="/static/js/statusbar.js"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

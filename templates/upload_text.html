@@ -1,0 +1,501 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="p-6 space-y-4">
+  <h2 class="text-lg font-semibold">上传文本</h2>
+
+  <div class="bg-white border rounded p-4 space-y-4">
+    <form id="upload-form" class="space-y-3" method="post" action="/upload" enctype="multipart/form-data">
+      <div id="drop-zone" class="border-2 border-dashed rounded p-6 text-center text-gray-500 cursor-pointer hover:bg-gray-50">
+        将 .txt 拖拽到此处，或点击选择（≤ 5MB）
+        <input type="file" id="file-input" name="file" accept=".txt" class="hidden" />
+      </div>
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">标题 <span class="text-red-500">*</span></label>
+        <input type="text" id="title-input" name="title" class="w-full border rounded px-3 py-2" placeholder="请输入标题（1-80字符）" required />
+        <div id="title-error" class="text-red-500 text-sm mt-1 hidden"></div>
+        <div id="title-success" class="text-green-500 text-sm mt-1 hidden">✓ 标题可用</div>
+      </div>
+      
+      <!-- 音色选择（暂时禁用，作为扩展功能） -->
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">音色选择</label>
+        <select name="voice" class="w-full border rounded px-3 py-2 bg-gray-100" disabled>
+          <option value="dialogue_mode">对话模式（自动分配）</option>
+        </select>
+        <p class="text-xs text-gray-500 mt-1">当前为对话模式，系统自动分配男女声</p>
+      </div>
+      
+      <!-- 对话格式说明 -->
+      <div class="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+        <strong>对话格式说明：</strong><br>
+        请使用以下格式输入对话：<br>
+        <code>人名（描述）：对话内容</code> 或 <code>人名：对话内容</code><br><br>
+        <strong>示例：</strong><br>
+        <code>婷婷（活泼感性）：哈喽，大家好！</code><br>
+        <code>小西（逻辑严谨）：哈哈，婷婷，你这热情能把录音室点着！</code><br><br>
+        <strong>注意：</strong>第一个出现的人名将使用女声，第二个使用男声。
+      </div>
+      
+      <div class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+        提示：点击生成音频后，不可更改文本
+      </div>
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">对话内容 <span class="text-red-500">*</span></label>
+        <textarea id="content-textarea" name="content" class="w-full h-64 border rounded px-3 py-2" placeholder="可直接粘贴对话内容，或上传文件后自动填充……" required></textarea>
+        <div id="content-error" class="text-red-500 text-sm mt-1 hidden"></div>
+        <div class="text-xs text-gray-500 mt-1">
+          支持直接粘贴文本或上传文件。格式：<code>人名（描述）：对话内容</code> 或 <code>人名：对话内容</code>
+        </div>
+      </div>
+      <div class="flex justify-end">
+        <button class="px-4 py-2 bg-blue-600 text-white rounded" type="submit">生成音频</button>
+      </div>
+    </form>
+    
+    <!-- 状态显示容器 -->
+    <div id="status-container" style="display: none;"></div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const titleInput = document.getElementById('title-input');
+    const contentTextarea = document.getElementById('content-textarea');
+    const titleError = document.getElementById('title-error');
+    const titleSuccess = document.getElementById('title-success');
+    const contentError = document.getElementById('content-error');
+    const submitButton = document.querySelector('button[type="submit"]');
+    
+    let titleValid = false;
+    let contentValid = false;
+
+    // 使用全局状态栏
+    function updateStatusBar(obj) { if (window.AppStatusBar) window.AppStatusBar.update(obj); }
+
+    // 标题校验
+    titleInput.addEventListener('blur', function() {
+        validateTitle();
+    });
+    
+    titleInput.addEventListener('input', function() {
+        // 清除之前的校验状态
+        titleError.classList.add('hidden');
+        titleSuccess.classList.add('hidden');
+        titleValid = false;
+        updateSubmitButton();
+    });
+    
+    // 内容校验
+    contentTextarea.addEventListener('input', function() {
+        validateContent();
+    });
+    
+    // 点击选择文件
+    dropZone.addEventListener('click', function() {
+        fileInput.click();
+    });
+
+    // 文件选择处理
+    fileInput.addEventListener('change', function(e) {
+        handleFile(e.target.files[0]);
+    });
+
+    // 拖拽处理
+    dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dropZone.classList.add('bg-blue-50', 'border-blue-300');
+    });
+
+    dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        dropZone.classList.remove('bg-blue-50', 'border-blue-300');
+    });
+
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropZone.classList.remove('bg-blue-50', 'border-blue-300');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFile(files[0]);
+        }
+    });
+
+    function handleFile(file) {
+        // 验证文件类型
+        if (!file.name.toLowerCase().endsWith('.txt')) {
+            alert('请选择 .txt 文件');
+            return;
+        }
+
+        // 验证文件大小 (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('文件大小不能超过 5MB');
+            return;
+        }
+
+        // 设置文件名作为标题
+        const fileName = file.name.replace(/\.[^/.]+$/, "");
+        titleInput.value = fileName;
+        // 自动校验标题
+        setTimeout(() => validateTitle(), 100);
+
+        // 读取文件内容
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            contentTextarea.value = e.target.result;
+            // 验证对话格式
+            validateContent();
+        };
+        reader.readAsText(file, 'UTF-8');
+    }
+
+    // 标题校验函数
+    async function validateTitle() {
+        const title = titleInput.value.trim();
+        
+        // 清除之前的错误状态
+        titleError.classList.add('hidden');
+        titleSuccess.classList.add('hidden');
+        
+        if (!title) {
+            titleError.textContent = '标题不能为空';
+            titleError.classList.remove('hidden');
+            titleValid = false;
+            updateSubmitButton();
+            return;
+        }
+        
+        if (title.length < 1 || title.length > 80) {
+            titleError.textContent = '标题长度必须在1-80字符之间';
+            titleError.classList.remove('hidden');
+            titleValid = false;
+            updateSubmitButton();
+            return;
+        }
+        
+        // 检查标题是否已存在
+        try {
+            const response = await fetch(`/api/text/title_exists?title=${encodeURIComponent(title)}`);
+            const result = await response.json();
+            
+            if (result.exists) {
+                titleError.textContent = '标题已存在，请使用其他标题';
+                titleError.classList.remove('hidden');
+                titleValid = false;
+            } else {
+                titleSuccess.classList.remove('hidden');
+                titleValid = true;
+            }
+        } catch (error) {
+            console.error('标题校验错误:', error);
+            titleError.textContent = '标题校验失败，请重试';
+            titleError.classList.remove('hidden');
+            titleValid = false;
+        }
+        
+        updateSubmitButton();
+    }
+    
+    // 内容校验函数
+    function validateContent() {
+        const text = contentTextarea.value.trim();
+        
+        // 清除之前的错误状态
+        contentError.classList.add('hidden');
+        
+        if (!text) {
+            contentValid = false;
+            updateSubmitButton();
+            return;
+        }
+        
+        const lines = text.split('\n');
+        let firstInvalidLine = -1;
+        let validLines = 0;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            // 检查是否符合格式：人名（描述）：对话内容 或 人名：对话内容
+            if (line.match(/^[^（]+（[^）]*）：.+$/) || line.match(/^[^：]+：.+$/)) {
+                validLines++;
+            } else if (firstInvalidLine === -1) {
+                firstInvalidLine = i + 1;
+            }
+        }
+        
+        if (validLines === 0) {
+            contentError.textContent = '文本格式不符合对话要求。请使用格式：人名（描述）：对话内容 或 人名：对话内容';
+            contentError.classList.remove('hidden');
+            contentValid = false;
+        } else if (firstInvalidLine !== -1) {
+            contentError.textContent = `第${firstInvalidLine}行格式不正确，请检查对话格式`;
+            contentError.classList.remove('hidden');
+            contentValid = false;
+        } else {
+            contentValid = true;
+        }
+        
+        updateSubmitButton();
+    }
+    
+    // 更新提交按钮状态
+    function updateSubmitButton() {
+        if (titleValid && contentValid) {
+            submitButton.disabled = false;
+            submitButton.classList.remove('bg-gray-400');
+            submitButton.classList.add('bg-blue-600');
+        } else {
+            submitButton.disabled = true;
+            submitButton.classList.remove('bg-blue-600');
+            submitButton.classList.add('bg-gray-400');
+        }
+    }
+
+    // 表单提交前验证和AJAX处理
+    document.getElementById('upload-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // 最终校验
+        if (!titleValid || !contentValid) {
+            alert('请检查标题和内容格式');
+            return;
+        }
+        
+        // 获取表单数据
+        const formData = new FormData(this);
+        const title = formData.get('title') || 'untitled';
+        const filename = formData.get('file') ? formData.get('file').name : `${title}.txt`;
+        
+        // 显示生成中状态
+        showGeneratingStatus();
+        
+        try {
+            // 读取当前内容
+            const content = contentTextarea.value.trim();
+            // 发送AJAX请求
+            const response = await fetch('/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ title, content, filename })
+            });
+
+            let result = null;
+            try {
+                result = await response.json();
+            } catch (parseErr) {
+                console.error('响应解析失败:', parseErr);
+                updateStatusBar({event:'upload_parse_error', error:String(parseErr)});
+                showErrorStatus('服务器返回非JSON响应，请稍后重试');
+                return;
+            }
+
+            if (!response.ok || result.success === false) {
+                const msg = (result && result.error) ? result.error : `请求失败 (${response.status})`;
+                updateStatusBar({event:'upload_failed', status:response.status, error:msg});
+                showErrorStatus(msg);
+                return;
+            }
+
+            // 命中已存在分支：直接展示完成
+            if (result.skipped && result.audio_url) {
+                updateStatusBar({event:'skipped', ...result});
+                showCompletedStatus(result.audio_url, result.filename || 'audio.mp3');
+                return;
+            }
+
+            if (result.success && result.text_id) {
+                updateStatusBar({event:'submitted', text_id: result.text_id});
+                // 开始监听任务状态
+                startTaskMonitoring(result.text_id);
+            } else {
+                showErrorStatus('上传成功但缺少任务ID');
+                updateStatusBar({event:'missing_text_id', ...result});
+            }
+        } catch (error) {
+            console.error('上传错误:', error);
+            updateStatusBar({event:'upload_exception', error:String(error)});
+            showErrorStatus('网络错误：无法提交任务，请检查网络或稍后重试');
+        }
+    });
+    
+    function showGeneratingStatus() {
+        const form = document.getElementById('upload-form');
+        const statusDiv = document.getElementById('status-container');
+        
+        // 禁用表单
+        form.style.display = 'none';
+        
+        // 显示生成中状态
+        statusDiv.innerHTML = `
+            <div class="generating-status text-center py-8">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">正在生成音频</h3>
+                <p class="text-gray-600 mb-4">预计需要1-3分钟，请耐心等待...</p>
+                <div class="bg-blue-50 border border-blue-200 rounded px-4 py-2 text-sm text-blue-700">
+                    <strong>提示：</strong>生成过程中请勿关闭页面
+                </div>
+            </div>
+        `;
+        statusDiv.style.display = 'block';
+    }
+    
+    function showCompletedStatus(audioUrl, filename) {
+        const statusDiv = document.getElementById('status-container');
+        
+        statusDiv.innerHTML = `
+            <div class="completed-status text-center py-8">
+                <div class="text-green-600 text-4xl mb-4">✅</div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">音频生成完成！</h3>
+                <p class="text-gray-600 mb-4">文件名：${filename}</p>
+                
+                <div class="bg-white border rounded-lg p-4 mb-4">
+                    <audio controls class="w-full">
+                        <source src="${audioUrl}" type="audio/mpeg">
+                        您的浏览器不支持音频播放。
+                    </audio>
+                </div>
+                
+                <div class="flex justify-center gap-4">
+                    <a href="${audioUrl}" download="${filename}" 
+                       class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                        下载音频
+                    </a>
+                    <button onclick="resetForm()" 
+                            class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">
+                        生成新音频
+                    </button>
+                </div>
+                
+                <div class="mt-4 text-sm text-gray-500">
+                    音频已保存到资源库，可在首页查看
+                </div>
+            </div>
+        `;
+    }
+    
+    function showErrorStatus(errorMessage) {
+        const statusDiv = document.getElementById('status-container');
+        
+        statusDiv.innerHTML = `
+            <div class="error-status text-center py-8">
+                <div class="text-red-600 text-4xl mb-4">❌</div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">音频生成失败</h3>
+                <p class="text-red-600 mb-4">${errorMessage}</p>
+                
+                <div class="flex justify-center gap-4">
+                    <button onclick="retryTask()" 
+                            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                        重试
+                    </button>
+                    <button onclick="resetForm()" 
+                            class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">
+                        重新开始
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    function startTaskMonitoring(textId) {
+        const eventSource = new EventSource(`/api/task/stream/${textId}`);
+        
+        eventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                console.log('任务状态更新:', data);
+                updateStatusBar(data);
+                
+                if (data.status === 'completed') {
+                    eventSource.close();
+                    showCompletedStatus(data.audio_url, data.filename || 'audio.mp3');
+                } else if (data.status === 'failed' || data.status === 'timeout') {
+                    eventSource.close();
+                    showErrorStatus(data.error_message || '生成失败');
+                }
+            } catch (error) {
+                console.error('解析SSE数据错误:', error);
+                updateStatusBar({event:'sse_parse_error', error:String(error)});
+            }
+        };
+        
+        eventSource.onerror = function(event) {
+            console.error('SSE连接错误:', event);
+            eventSource.close();
+            // 退化为轮询任务状态，最多轮询120秒
+            pollTaskStatus(textId, 120);
+            updateStatusBar({event:'sse_error', text_id:textId});
+        };
+    }
+
+    async function pollTaskStatus(textId, seconds=120) {
+        const deadline = Date.now() + seconds * 1000;
+        let lastStatus = null;
+        while (Date.now() < deadline) {
+            try {
+                const r = await fetch(`/api/task/status/${textId}`, { headers: { 'Accept': 'application/json' } });
+                if (r.ok) {
+                    const s = await r.json();
+                    if (s.status !== lastStatus) {
+                        console.log('轮询状态:', s);
+                        lastStatus = s.status;
+                    }
+                    if (s.status === 'completed') {
+                        showCompletedStatus(s.audio_url, s.filename || 'audio.mp3');
+                        updateStatusBar({event:'completed', ...s});
+                        return;
+                    }
+                    if (s.status === 'failed' || s.status === 'timeout') {
+                        showErrorStatus(s.error_message || `任务${s.status}`);
+                        updateStatusBar({event:s.status, ...s});
+                        return;
+                    }
+                } else {
+                    console.warn('轮询状态HTTP错误:', r.status);
+                    updateStatusBar({event:'poll_http_error', status:r.status});
+                }
+            } catch (err) {
+                console.error('轮询异常:', err);
+                updateStatusBar({event:'poll_exception', error:String(err)});
+            }
+            await new Promise(res => setTimeout(res, 3000));
+        }
+        showErrorStatus('长时间无响应，任务可能已超时或失败');
+        updateStatusBar({event:'timeout', text_id:textId});
+    }
+    
+    function resetForm() {
+        const form = document.getElementById('upload-form');
+        const statusDiv = document.getElementById('status-container');
+        
+        form.style.display = 'block';
+        statusDiv.style.display = 'none';
+        
+        // 重置表单
+        form.reset();
+        document.getElementById('content-textarea').value = '';
+        document.getElementById('title-input').value = '';
+        
+        // 重置校验状态
+        titleValid = false;
+        contentValid = false;
+        titleError.classList.add('hidden');
+        titleSuccess.classList.add('hidden');
+        contentError.classList.add('hidden');
+        updateSubmitButton();
+    }
+    
+    function retryTask() {
+        // 这里可以实现重试逻辑
+        resetForm();
+    }
+});
+</script>
+{% endblock %}

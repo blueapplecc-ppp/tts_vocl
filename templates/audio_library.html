@@ -1,0 +1,50 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-lg font-semibold">音频资源库</h2>
+    <form class="flex items-center gap-2" method="get" action="/audios">
+      <input type="text" name="q" value="{{ q }}" placeholder="搜索标题/生成者" class="border rounded px-3 py-2" />
+      <select name="order" class="border rounded px-3 py-2">
+        <option value="desc" {% if order=='desc' %}selected{% endif %}>时间降序</option>
+        <option value="asc" {% if order=='asc' %}selected{% endif %}>时间升序</option>
+      </select>
+      <button class="px-4 py-2 bg-blue-600 text-white rounded">搜索</button>
+    </form>
+  </div>
+
+  <div class="bg-white border rounded p-4 space-y-3">
+    {% for a in items %}
+    <div class="p-3 border rounded flex items-center justify-between">
+      <div>
+        <div class="font-medium">{{ a.filename }}</div>
+        <div class="text-sm text-gray-500">用户ID {{ a.user_id }} · {{ a.created_at }} · 时长 {{ a.duration_sec or '—' }}s</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <audio controls class="h-8">
+          <source src="{{ pub_url(a.oss_object_key) }}" type="audio/mpeg" />
+        </audio>
+        <a href="{{ pub_url(a.oss_object_key) }}" class="text-blue-600 text-sm" download>下载</a>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="mt-2 flex justify-end gap-2">
+      {% if page > 1 %}
+      <a class="px-3 py-1 border rounded" href="/audios?q={{ q }}&order={{ order }}&page={{ page-1 }}">上一页</a>
+      {% endif %}
+      <a class="px-3 py-1 border rounded" href="/audios?q={{ q }}&order={{ order }}&page={{ page+1 }}">下一页</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function(){
+    if (window.AppStatusBar) {
+      AppStatusBar.update({event:'page_loaded', page:'audio_library', q:'{{ q }}', order:'{{ order }}', pageNo:{{ page }} });
+      AppStatusBar.update({event:'query_done', items_count: {{ items|length }} });
+    }
+  });
+</script>
+{% endblock %}
