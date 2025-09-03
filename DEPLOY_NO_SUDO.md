@@ -23,8 +23,9 @@
 
 ## 一、前置准备
 - 安装系统自带 Python（例如 `python3 --version`）与 `pip`/`venv` 模块（一般已内置）。
+- 必须在“项目根目录 ./”执行本文脚本（`APP_DIR=\$(pwd)`）。
 - 确认服务器防火墙/安全组开放你选择的端口（示例 8081）。
-- 准备数据库、OSS、火山 TTS 的可用凭据。
+- 准备数据库（沿用部署环境已有服务）、OSS、火山 TTS 的可用凭据。
 
 ---
 
@@ -215,13 +216,13 @@ echo "部署完成：访问 http://<服务器IP>:${BIND_PORT}/"
 - 健康：`./health.sh`
 - 日志：`./logs/server.out`（Gunicorn 标准输出/错误），应用结构化日志同目录
 
-> 安全建议：`db_config.json` 含敏感凭据，建议 `chmod 600 $HOME/db_config.json`。
+> 安全建议：`db_config.json` 含敏感凭据，建议 `chmod 600 ../db_config.json`。
 
 ---
 
 ## 四、常见问题与排障
 - 访问 404/502：确认进程是否启动、端口是否对外开放。
-- TTS 401/握手失败：刷新 Access Token，更新 `$HOME/db_config.json` 后执行 `restart.sh`。
+- TTS 401/握手失败：刷新 Access Token，更新 `../db_config.json` 后执行 `./restart.sh`。
 - OSS 403/上传失败：检查 AK/SK 与 Bucket 权限、地域是否匹配。
 - 数据库错误：确认 schema.sql 已导入、唯一索引已添加，数据库账号权限足够。
 - 前端“网络错误”提示：
