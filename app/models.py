@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
-from sqlalchemy import BigInteger, Integer, String, Text, TIMESTAMP, ForeignKey, SmallInteger
+from sqlalchemy import BigInteger, Integer, String, Text, TIMESTAMP, ForeignKey, SmallInteger, UniqueConstraint
 from sqlalchemy.sql import func
 
 Base = declarative_base()
@@ -40,6 +40,9 @@ class TtsText(Base):
 
 class TtsAudio(Base):
     __tablename__ = 'tts_audios'
+    __table_args__ = (
+        UniqueConstraint('oss_object_key', name='uq_tts_audios_oss_object_key'),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     text_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('tts_texts.id'), nullable=False)

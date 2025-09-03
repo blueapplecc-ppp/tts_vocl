@@ -5,12 +5,17 @@
 
 import time
 import logging
+import threading
+from sqlalchemy.exc import IntegrityError
 from typing import Dict, Any, Optional
 from ..models import get_session, TtsText, TtsAudio
 from .tts_service import TTSServiceInterface
 from .audio_service import AudioService
 
 logger = logging.getLogger(__name__)
+
+# 限制同时发起的TTS并发（基础限流）
+_TTS_CONCURRENCY_SEMA = threading.BoundedSemaphore(value=3)
 
 class TaskService:
     """任务服务 - 支持强幂等和超时处理"""
@@ -112,14 +117,16 @@ class TaskService:
                 logger.info(f"步骤3: 检查OSS文件是否存在 - text_id={text_id}")
                 import hashlib
                 from ..tts_client import compute_audio_filename
+                from ..oss import OssClient
                 filename = compute_audio_filename(
                     text_row.title, 
                     text_row.char_count, 
                     1  # 总是使用版本1，确保幂等
                 )
-                # 内容哈希前缀，避免同标题不同内容冲突
+                # 标题规范化 + 内容哈希前缀，避免同标题不同内容冲突
                 content_hash = hashlib.sha256(text_row.content.encode('utf-8')).hexdigest()[:8]
-                object_key = f"audios/{text_row.title}/{content_hash}/{filename}"
+                safe_title = OssClient.sanitize_path_segment(text_row.title)
+                object_key = f"audios/{safe_title}/{content_hash}/{filename}"
                 logger.info(f"计算的文件名: {filename}")
                 logger.info(f"OSS对象键: {object_key}")
                 
@@ -182,7 +189,11 @@ class TaskService:
                 # 生成音频
                 logger.info(f"步骤4: 开始TTS音频生成 - text_id={text_id}")
                 logger.info(f"调用TTS服务: text_length={len(text_row.content)}")
-                audio_data = await self.tts_service.synthesize_text(text_row.content, text_id=text_id)
+                _TTS_CONCURRENCY_SEMA.acquire()
+                try:
+                    audio_data = await self.tts_service.synthesize_text(text_row.content, text_id=text_id)
+                finally:
+                    _TTS_CONCURRENCY_SEMA.release()
                 logger.info(f"TTS生成完成: 音频数据大小={len(audio_data)} 字节")
                 
                 # 上传到OSS
@@ -206,8 +217,21 @@ class TaskService:
                     version_num=1
                 )
                 s.add(audio_row)
-                s.commit()
-                logger.info(f"数据库记录保存成功: audio_id={audio_row.id}")
+                try:
+                    s.commit()
+                    logger.info(f"数据库记录保存成功: audio_id={audio_row.id}")
+                except IntegrityError:
+                    s.rollback()
+                    # 并发下已存在，复用已有记录
+                    logger.warning("并发写入命中唯一约束，复用已存在音频记录")
+                    existing_audio = s.query(TtsAudio).filter(
+                        TtsAudio.oss_object_key == object_key,
+                        TtsAudio.is_deleted == 0
+                    ).first()
+                    if existing_audio:
+                        audio_row = existing_audio
+                    else:
+                        raise
                 
                 duration = time.time() - start_time
                 logger.info(f"=== TTS任务完成 ===")

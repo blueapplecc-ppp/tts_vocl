@@ -85,6 +85,10 @@ python run_refactored_app.py  # 默认监听 8081
 
 **重要提醒：每次启动项目前都必须先激活虚拟环境！**
 
+## 部署（无 sudo 环境）
+- 参考根目录文档：`DEPLOY_NO_SUDO.md`
+- 一键脚本：`docs/scripts/deploy.sh`（在项目根目录执行，生成 `./start.sh`、`./stop.sh`、`./restart.sh`、`./health.sh`）
+
 ## 配置键说明（摘要）
 - `AUTH_ENABLED`: 是否启用鉴权（布尔）
 - `MYSQL`: `HOST`, `PORT`, `USER`, `PASSWORD`, `DB`, `POOL_SIZE`, `POOL_TIMEOUT`, `POOL_RECYCLE`

@@ -139,9 +139,11 @@ def upload_text():
 
     try:
         # 上传文本到 OSS
+        from .oss import OssClient
         oss = current_app.config['OSS_CLIENT']
         safe_title = title or 'untitled'
-        text_object_key = f"texts/{safe_title}/{filename}"
+        safe_folder = OssClient.sanitize_path_segment(safe_title)
+        text_object_key = f"texts/{safe_folder}/{filename}"
         oss.upload_bytes(text_object_key, content.encode('utf-8'), content_type='text/plain; charset=utf-8')
 
         # 入库，并异步TTS
@@ -173,7 +175,7 @@ def upload_text():
         from .tts_client import compute_audio_filename
         audio_filename = compute_audio_filename(safe_title, char_count, 1)
         content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()[:8]
-        audio_object_key = f"audios/{safe_title}/{content_hash}/{audio_filename}"
+        audio_object_key = f"audios/{safe_folder}/{content_hash}/{audio_filename}"
         audio_exists = oss.object_exists(audio_object_key)
         if audio_exists:
             # 若数据库缺记录，补写一条（文件大小未知置0）
