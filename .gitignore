@@ -1,0 +1,72 @@
+# 敏感配置与密钥文件
+db_config*.json
+db_config*.ini
+*.pem
+*.p12
+*-key.json
+service_account*.json
+*.crt
+*.key
+.env
+.env.*
+secrets/
+credentials/
+
+# 虚拟环境与Python缓存
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 日志与运行产物
+logs/
+*.log
+*.sqlite
+*.db
+instance/
+.pytest_cache/
+
+# 系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE与编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# 音频文件（避免提交大文件）
+*.mp3
+*.wav
+*.m4a
+*.aac
+
+# 测试文件
+test_*.txt
+test_*.py
+*_test.py
+
+# 外部数据目录
+/data/
+/Users/gold/codes/
