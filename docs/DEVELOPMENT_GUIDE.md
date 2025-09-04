@@ -254,7 +254,7 @@ import requests
 
 def test_upload_performance():
     start_time = time.time()
-    response = requests.post('http://localhost:8081/upload', data=form_data)
+    response = requests.post('http://localhost:8082/upload', data=form_data)
     end_time = time.time()
     
     assert response.status_code == 200
@@ -279,7 +279,7 @@ app.config.update(
 pip install gunicorn
 
 # 启动生产服务器
-gunicorn -w 4 -b 0.0.0.0:8081 run_refactored_app:app
+gunicorn -w 4 -b 0.0.0.0:8082 run_refactored_app:app
 ```
 
 ### 3. 使用Nginx反向代理
@@ -289,7 +289,7 @@ server {
     server_name your-domain.com;
     
     location / {
-        proxy_pass http://127.0.0.1:8081;
+        proxy_pass http://127.0.0.1:8082;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }

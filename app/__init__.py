@@ -78,6 +78,14 @@ def create_app() -> Flask:
 
     app.config['AUTH_ENABLED'] = bool(str(cfg.get('AUTH_ENABLED', 'false')).lower() == 'true')
 
+    # Flask-Login 配置
+    app.config["SECRET_KEY"] = cfg.get("JWT", {}).get("SECRET", "change-me")
+    app.config["LOGIN_DISABLED"] = not app.config["AUTH_ENABLED"]
+    
+    # OAuth 配置
+    app.config["OAUTH"] = cfg.get("OAUTH", {})
+    app.config["SUPER_ADMIN_EMAILS"] = cfg.get("SUPER_ADMIN_EMAILS", [])
+
     jwt_cfg = cfg.get('JWT', {})
     app.config['JWT_SECRET_KEY'] = jwt_cfg.get('SECRET', 'change-me')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = int(jwt_cfg.get('EXPIRES_MINUTES', 120)) * 60
@@ -152,8 +160,39 @@ def create_app() -> Flask:
     public_settings = PublicSettings.from_config(cfg)
     app.config['PUBLIC_CONFIG'] = public_settings
 
+    # 初始化 Flask-Login
+    from flask_login import LoginManager
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = "auth.login"
+    login_manager.login_message = "请先登录才能访问此页面"
+    login_manager.login_message_category = "info"
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        from .models import get_session, TtsUser
+        with get_session() as s:
+            user = s.query(TtsUser).filter(TtsUser.id == user_id).first()
+            if user:
+                from .auth import TtsUserMixin
+                return TtsUserMixin(
+                    user_id=user.id,
+                    email=user.email,
+                    name=user.name,
+                    avatar_url=user.avatar_url,
+                    platform=user.platform,
+                    platform_user_id=user.platform_user_id,
+                    is_whitelisted=user.is_whitelisted,
+                    is_admin=user.is_admin
+                )
+            return None
+
     from .views import bp as main_bp
     app.register_blueprint(main_bp)
+
+    # 注册鉴权 Blueprint
+    from . import auth_routes
+    app.register_blueprint(auth_routes.auth_bp)
 
     # 后台超时检查线程，避免任务卡住无终态
     def _timeout_watcher(mon: TaskMonitor, interval: int = 30):

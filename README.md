@@ -80,7 +80,7 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 export FLASK_ENV=development
 
 # 启动应用
-python run_refactored_app.py  # 默认监听 8081
+python run_refactored_app.py  # 默认监听 8082
 ```
 
 **重要提醒：每次启动项目前都必须先激活虚拟环境！**
@@ -99,7 +99,7 @@ python run_refactored_app.py  # 默认监听 8081
 - 代理：遵循系统环境变量 `http_proxy`/`https_proxy`/`all_proxy`
 
 ## 最小端到端测试清单（E2E）
-1. 启动应用：访问 `http://127.0.0.1:8081/`
+1. 启动应用：访问 `http://127.0.0.1:8082/`
 2. 上传文本页面：上传 `.txt`（≤5MB），默认标题为文件名（可编辑标题与文本）
 3. 点击“生成音频”：
    - 文本应上传至 OSS（公开读）

@@ -4,7 +4,7 @@ import asyncio
 from sqlalchemy import select, desc, asc
 from .models import get_session, TtsText, TtsAudio
 from .tasks import executor, run_tts_and_upload
-from .auth import get_current_user_id
+from .auth import get_current_user_id, auth_required, admin_required
 import os
 import io
 import json
@@ -14,6 +14,8 @@ bp = Blueprint('main', __name__)
 logger = logging.getLogger(__name__)
 
 
+
+@auth_required
 @bp.get('/')
 def index():
     q = request.args.get('q', '').strip()
@@ -51,6 +53,8 @@ def index():
 
 
 @bp.get('/audios')
+
+@auth_required
 def audio_library():
     q = request.args.get('q', '').strip()
     order = request.args.get('order', 'desc')
@@ -74,6 +78,8 @@ def audio_library():
 
 
 @bp.route('/upload', methods=['GET', 'POST'])
+
+@auth_required
 def upload_text():
     if request.method == 'GET':
         # 获取公开配置
@@ -246,6 +252,8 @@ def upload_text():
     return redirect(url_for('main.index'))
 
 @bp.route('/settings')
+
+@admin_required
 def settings():
     """系统设置页面"""
     public_config = current_app.config.get('PUBLIC_CONFIG')
