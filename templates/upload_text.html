@@ -220,8 +220,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const line = lines[i].trim();
             if (!line) continue;
             
-            // 检查是否符合格式：人名（描述）：对话内容 或 人名：对话内容
-            if (line.match(/^[^（]+（[^）]*）：.+$/) || line.match(/^[^：]+：.+$/)) {
+            // 检查是否符合格式：
+            // - 人名（描述）：对话内容  或  人名：对话内容
+            // - 同时支持中文/英文冒号 [:：]
+            // - 可选描述支持中文/英文括号 （…） 与 (…)
+            const withDesc = /^[^（(]+[（(][^）)]*[）)]\s*[:：]\s*.+$/;
+            const withoutDesc = /^[^:：]+[:：]\s*.+$/;
+            if (withDesc.test(line) || withoutDesc.test(line)) {
                 validLines++;
             } else if (firstInvalidLine === -1) {
                 firstInvalidLine = i + 1;

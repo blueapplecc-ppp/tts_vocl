@@ -239,10 +239,6 @@ def auth_required(f):
     
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # 如果鉴权功能被禁用，直接跳过认证检查
-        if not current_app.config.get('AUTH_ENABLED', False):
-            return f(*args, **kwargs)
-        
         if not hasattr(current_user, "is_authenticated") or not current_user.is_authenticated:
             return redirect(url_for('auth.login'))
         if not current_user.is_whitelisted:
@@ -257,10 +253,6 @@ def admin_required(f):
     
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # 如果鉴权功能被禁用，直接跳过认证检查
-        if not current_app.config.get('AUTH_ENABLED', False):
-            return f(*args, **kwargs)
-        
         if not hasattr(current_user, "is_authenticated") or not current_user.is_authenticated:
             return redirect(url_for('auth.login'))
         if not current_user.is_whitelisted:
