@@ -59,6 +59,9 @@ class VolcTtsClient:
     def parse_dialogue_text(self, text: str) -> List[Dict[str, str]]:
         """解析对话文本，返回角色和内容列表"""
         import re
+        import unicodedata
+        # 统一规范化，避免不同来源文本的组合字符差异导致匹配失败
+        text = unicodedata.normalize('NFC', text or '')
         lines = text.strip().split('\n')
         dialogue_parts = []
         
@@ -66,27 +69,19 @@ class VolcTtsClient:
             line = line.strip()
             if not line:
                 continue
-                
-            # 匹配格式：人名（描述）：对话内容
-            match_with_desc = re.match(r'^([^（]+)（[^）]*）：(.+)$', line)
-            if match_with_desc:
-                role = match_with_desc.group(1).strip()
-                content = match_with_desc.group(2).strip()
-                dialogue_parts.append({
-                    'role': role,
-                    'content': content
-                })
-                continue
             
-            # 匹配格式：人名：对话内容
-            match_without_desc = re.match(r'^([^：]+)：(.+)$', line)
-            if match_without_desc:
-                role = match_without_desc.group(1).strip()
-                content = match_without_desc.group(2).strip()
-                dialogue_parts.append({
-                    'role': role,
-                    'content': content
-                })
+            # 统一的对话行匹配：
+            # - 角色名 + 可选描述（支持中文/英文括号）+ 中文/英文冒号 + 内容
+            # - 例如：A: 你好    A：你好    小童（旁白）：开始吧    小童(旁白): 开始吧
+            # - 冒号兼容 [:：]；括号兼容 （） 与 ()
+            m = re.match(r'^\s*(?P<role>[^（(:：]+?)\s*(?:[（(][^）)]*[）)])?\s*[:：]\s*(?P<content>.+)$', line)
+            if m:
+                role = m.group('role').strip()
+                content = m.group('content').strip()
+                # 忽略舞台提示/标注：去除方括号中的内容，如 [笑]、[停顿]
+                content = re.sub(r'\[[^\]]+\]', '', content).strip()
+                if content:
+                    dialogue_parts.append({'role': role, 'content': content})
                 continue
         
         return dialogue_parts

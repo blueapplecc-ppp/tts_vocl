@@ -83,6 +83,9 @@ class TTSService(TTSServiceInterface):
     def validate_dialogue_format(self, text: str) -> bool:
         """验证对话格式"""
         import re
+        import unicodedata
+        # 统一规范化，避免不同来源文本的组合字符差异导致匹配失败
+        text = unicodedata.normalize('NFC', text or '')
         lines = text.strip().split('\n')
         valid_lines = 0
         
@@ -91,9 +94,15 @@ class TTSService(TTSServiceInterface):
             if not line:
                 continue
             
-            # 检查是否符合格式：人名（描述）：对话内容 或 人名：对话内容
-            if (re.match(r'^[^（]+（[^）]*）：.+$', line) or 
-                re.match(r'^[^：]+：.+$', line)):
+            # 正则说明：
+            # - 同时支持中文/英文冒号：[:：]
+            # - 可选的人名后描述，支持中文/英文括号：（…）或 (…)
+            #   形如：人名（描述）：内容  或  人名(描述): 内容
+            # - 允许人名为中英文、数字等，最关键是能在第一个冒号前正确切分
+            # with_desc:    角色 + （…）/ (…) + 冒号 + 内容
+            # without_desc: 角色 + 冒号 + 内容
+            if (re.match(r'^[^（(]+[（(][^）)]*[）)]\s*[:：]\s*.+$', line) or 
+                re.match(r'^[^:：]+[:：]\s*.+$', line)):
                 valid_lines += 1
             else:
                 return False
