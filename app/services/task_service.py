@@ -15,7 +15,7 @@ from .audio_service import AudioService
 logger = logging.getLogger(__name__)
 
 # 限制同时发起的TTS并发（基础限流）
-_TTS_CONCURRENCY_SEMA = threading.BoundedSemaphore(value=3)
+_TTS_CONCURRENCY_SEMA = threading.BoundedSemaphore(value=8)
 
 class TaskService:
     """任务服务 - 支持强幂等和超时处理"""

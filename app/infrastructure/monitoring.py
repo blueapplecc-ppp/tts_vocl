@@ -44,7 +44,7 @@ class TaskMonitor:
         self.followers: Dict[int, List[int]] = defaultdict(list)
         self.follow_parent: Dict[int, int] = {}  # follower_id -> leader_id
         self.lock = threading.RLock()
-        self.timeout_seconds = 20 * 60  # 20分钟超时
+        self.timeout_seconds = 40 * 60  # 40分钟超时
     
     def _generate_idempotency_key(self, text_content: str) -> str:
         """生成幂等键"""

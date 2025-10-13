@@ -1,0 +1,123 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="p-6">
+  <h2 class="text-2xl font-bold mb-6">系统监控</h2>
+  
+  <!-- 指标卡片 -->
+  <div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="bg-white p-6 rounded shadow">
+      <div class="text-gray-500 text-sm">活跃任务</div>
+      <div class="text-3xl font-bold mt-2">
+        <span id="active-tasks">0</span>/<span id="max-concurrent">8</span>
+      </div>
+    </div>
+    
+    <div class="bg-white p-6 rounded shadow">
+      <div class="text-gray-500 text-sm">总任务数</div>
+      <div class="text-3xl font-bold mt-2" id="total-tasks">0</div>
+    </div>
+    
+    <div class="bg-white p-6 rounded shadow">
+      <div class="text-gray-500 text-sm">成功率</div>
+      <div class="text-3xl font-bold mt-2">
+        <span id="success-rate">0</span>%
+      </div>
+    </div>
+    
+    <div class="bg-white p-6 rounded shadow">
+      <div class="text-gray-500 text-sm">平均耗时</div>
+      <div class="text-3xl font-bold mt-2">
+        <span id="avg-duration">0</span>s
+      </div>
+    </div>
+  </div>
+
+  <!-- 活跃任务列表 -->
+  <div class="bg-white rounded shadow">
+    <div class="p-4 border-b flex justify-between items-center">
+      <h3 class="text-lg font-bold">活跃任务</h3>
+      <div class="text-sm text-gray-500">
+        最后更新: <span id="last-update">--</span>
+      </div>
+    </div>
+    <table class="w-full">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-2 text-left">文本ID</th>
+          <th class="px-4 py-2 text-left">状态</th>
+          <th class="px-4 py-2 text-left">开始时间</th>
+          <th class="px-4 py-2 text-left">已运行</th>
+        </tr>
+      </thead>
+      <tbody id="active-list">
+        <tr>
+          <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+            暂无活跃任务
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function formatDuration(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatTime(timestamp) {
+  const d = new Date(timestamp * 1000);
+  return d.toLocaleTimeString('zh-CN');
+}
+
+async function updateStats() {
+  try {
+    const resp = await fetch('/api/monitor/stats');
+    const data = await resp.json();
+    
+    document.getElementById('active-tasks').textContent = data.active_tasks;
+    document.getElementById('max-concurrent').textContent = data.max_concurrent;
+    document.getElementById('total-tasks').textContent = data.total_tasks;
+    document.getElementById('success-rate').textContent = data.success_rate;
+    document.getElementById('avg-duration').textContent = data.avg_duration;
+    
+    const tbody = document.getElementById('active-list');
+    if (data.active_list.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+            暂无活跃任务
+          </td>
+        </tr>
+      `;
+    } else {
+      tbody.innerHTML = data.active_list.map(task => `
+        <tr class="border-t">
+          <td class="px-4 py-2">#${task.text_id}</td>
+          <td class="px-4 py-2">
+            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
+              ${task.status}
+            </span>
+          </td>
+          <td class="px-4 py-2">${formatTime(task.start_time)}</td>
+          <td class="px-4 py-2">${formatDuration(task.duration)}</td>
+        </tr>
+      `).join('');
+    }
+    
+    document.getElementById('last-update').textContent = formatTime(data.timestamp);
+  } catch (e) {
+    console.error('更新监控数据失败:', e);
+  }
+}
+
+updateStats();
+setInterval(updateStats, 5000);
+</script>
+{% endblock %}
+

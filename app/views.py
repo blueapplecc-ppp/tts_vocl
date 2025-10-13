@@ -21,7 +21,7 @@ def index():
     order = request.args.get('order', 'desc')
     page = int(request.args.get('page', 1))
     selected_id = request.args.get('selected_id')
-    page_size = 40
+    page_size = 10
 
     with get_session() as s:
         stmt = select(TtsText).where(TtsText.is_deleted == 0)
@@ -56,7 +56,7 @@ def audio_library():
     q = request.args.get('q', '').strip()
     order = request.args.get('order', 'desc')
     page = int(request.args.get('page', 1))
-    page_size = 40
+    page_size = 10
 
     with get_session() as s:
         stmt = select(TtsAudio).where(TtsAudio.is_deleted == 0)
@@ -470,3 +470,54 @@ def get_system_status():
         "memory_logs_count": len(memory_log_buffer.logs),
         "system_health": "ok"
     })
+
+
+@bp.get('/monitor')
+def monitor():
+    """系统监控页面"""
+    return render_template('monitor.html')
+
+
+@bp.get('/api/monitor/stats')
+def monitor_stats():
+    """获取监控统计数据API"""
+    try:
+        monitor = current_app.config['MONITOR']
+        
+        # 从task_service读取实际并发限制
+        from .services.task_service import _TTS_CONCURRENCY_SEMA
+        max_concurrent = _TTS_CONCURRENCY_SEMA._value
+        
+        stats = monitor.get_stats()
+        active_tasks = monitor.get_active_tasks()
+        
+        # 计算成功率
+        total = stats['total_tasks']
+        success_rate = (stats['tasks_completed'] / total * 100) if total > 0 else 0
+        
+        # 获取活跃任务详情
+        active_list = []
+        for text_id in active_tasks:
+            task_status = monitor.get_task_status(text_id)
+            if task_status:
+                active_list.append({
+                    'text_id': text_id,
+                    'status': task_status['status'],
+                    'start_time': task_status.get('start_time', 0),
+                    'duration': int(time.time() - task_status.get('start_time', time.time()))
+                })
+        
+        return jsonify({
+            'active_tasks': len(active_tasks),
+            'max_concurrent': max_concurrent,
+            'total_tasks': total,
+            'success_rate': round(success_rate, 1),
+            'avg_duration': round(stats['average_duration'], 1),
+            'tasks_completed': stats['tasks_completed'],
+            'tasks_failed': stats['tasks_failed'],
+            'active_list': active_list,
+            'timestamp': int(time.time())
+        })
+    except Exception as e:
+        logger.error(f"监控API错误: {e}")
+        return jsonify({'error': str(e)}), 500
