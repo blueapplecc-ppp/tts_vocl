@@ -19,6 +19,7 @@ class TTSSettings:
     # 对话配置
     available_speakers: List[str]
     max_text_length: int
+    max_round_length: int  # 单个对话轮次最大长度
     max_retries: int
     retry_delay: int
     
@@ -41,6 +42,7 @@ class TTSSettings:
                 'zh_male_dayi_v2_saturn_bigtts'
             ]),
             max_text_length=tts_config.get('max_text_length', 25000),
+            max_round_length=tts_config.get('max_round_length', 250),
             max_retries=tts_config.get('max_retries', 3),
             retry_delay=tts_config.get('retry_delay', 5),
         )
@@ -51,6 +53,7 @@ class PublicSettings:
     available_speakers: List[str]
     dialogue_format_example: str
     max_text_length: int
+    max_round_length: int  # 单个对话轮次最大长度
     supported_formats: List[str]
     max_concurrent_tasks: int
     task_timeout: int
@@ -72,6 +75,7 @@ class PublicSettings:
             available_speakers=bigtts_speakers,
             dialogue_format_example="婷婷（活泼感性）：对话内容\n小西（逻辑严谨）：对话内容",
             max_text_length=tts_config.get('max_text_length', 25000),
+            max_round_length=tts_config.get('max_round_length', 250),
             supported_formats=tts_config.get('supported_formats', ['.txt']),
             max_concurrent_tasks=system_config.get('max_concurrent_tasks', 5),
             task_timeout=system_config.get('task_timeout', 300),

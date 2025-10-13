@@ -199,6 +199,44 @@ document.addEventListener('DOMContentLoaded', function() {
         updateSubmitButton();
     }
     
+    // TTS API限制常量
+    const MAX_DIALOGUE_ROUND_LENGTH = 250;  // 单轮对话最大字符数
+    const MIN_SPLIT_RATIO = 0.7;  // 最小分割比例
+    
+    // 检测对话内容是否可以被后端正确处理
+    function canBackendHandle(content) {
+        if (content.length <= MAX_DIALOGUE_ROUND_LENGTH) {
+            return { canHandle: true };
+        }
+        
+        // 检查是否存在可用的分割点
+        const safeLength = MAX_DIALOGUE_ROUND_LENGTH;
+        const minLength = safeLength * MIN_SPLIT_RATIO;
+        
+        // 优先检查中文标点
+        const chinesePunctuation = '。？！';
+        for (let punct of chinesePunctuation) {
+            const pos = content.lastIndexOf(punct, safeLength - 1);
+            if (pos >= minLength) {
+                return { canHandle: true };
+            }
+        }
+        
+        // 检查英文标点
+        const englishPunctuation = '.?!';
+        for (let punct of englishPunctuation) {
+            const pos = content.lastIndexOf(punct, safeLength - 1);
+            if (pos >= minLength) {
+                return { canHandle: true };
+            }
+        }
+        
+        // 如果没有合适的分割点，后端只能强制分割，可能影响语义
+        // 但技术上仍然可以处理，所以返回true
+        // 注意：这里可以根据业务需求调整策略
+        return { canHandle: true };
+    }
+
     // 内容校验函数
     function validateContent() {
         const text = contentTextarea.value.trim();
@@ -215,30 +253,50 @@ document.addEventListener('DOMContentLoaded', function() {
         const lines = text.split('\n');
         let firstInvalidLine = -1;
         let validLines = 0;
+        let unhandleableIssue = null;
         
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
             
-            // 检查是否符合格式：
-            // - 人名（描述）：对话内容  或  人名：对话内容
-            // - 同时支持中文/英文冒号 [:：]
-            // - 可选描述支持中文/英文括号 （…） 与 (…)
-            const withDesc = /^[^（(]+[（(][^）)]*[）)]\s*[:：]\s*.+$/;
-            const withoutDesc = /^[^:：]+[:：]\s*.+$/;
-            if (withDesc.test(line) || withoutDesc.test(line)) {
+            // 检查格式并提取对话内容
+            const withDesc = /^([^（(]+[（(][^）)]*[）)]\s*[:：]\s*)(.+)$/;
+            const withoutDesc = /^([^:：]+[:：]\s*)(.+)$/;
+            
+            let match = withDesc.exec(line) || withoutDesc.exec(line);
+            
+            if (match) {
                 validLines++;
+                const role = match[1].trim();
+                const content = match[2].trim();
+                
+                // 检查后端是否可以处理此对话内容
+                const handleResult = canBackendHandle(content);
+                if (!handleResult.canHandle) {
+                    unhandleableIssue = {
+                        line: i + 1,
+                        role: role,
+                        content: content.substring(0, 50) + '...',
+                        length: content.length
+                    };
+                    break;
+                }
             } else if (firstInvalidLine === -1) {
                 firstInvalidLine = i + 1;
             }
         }
         
+        // 错误处理
         if (validLines === 0) {
             contentError.textContent = '文本格式不符合对话要求。请使用格式：人名（描述）：对话内容 或 人名：对话内容';
             contentError.classList.remove('hidden');
             contentValid = false;
         } else if (firstInvalidLine !== -1) {
             contentError.textContent = `第${firstInvalidLine}行格式不正确，请检查对话格式`;
+            contentError.classList.remove('hidden');
+            contentValid = false;
+        } else if (unhandleableIssue) {
+            contentError.innerHTML = `<span class="text-red-600">❌ 第${unhandleableIssue.line}行对话内容过长，超过${MAX_DIALOGUE_ROUND_LENGTH}字符，且无法自动分段<br><br>请在前${MAX_DIALOGUE_ROUND_LENGTH}字符内添加标点符号（。！？.!?）或手动分割为多轮对话。</span>`;
             contentError.classList.remove('hidden');
             contentValid = false;
         } else {

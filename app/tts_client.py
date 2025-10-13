@@ -33,10 +33,13 @@ class VolcTtsClient:
         nlp_texts = []
         for part in dialogue_parts:
             speaker = self.get_speaker_for_role(part['role'])
-            nlp_texts.append({
-                "speaker": speaker,
-                "text": part['content']
-            })
+            # 应用智能分段，防止单个轮次超过TTS API限制
+            segments = self.split_long_dialogue(part['role'], part['content'])
+            for segment in segments:
+                nlp_texts.append({
+                    "speaker": speaker,
+                    "text": segment['content']
+                })
         
         return {
             "input_id": input_id,
@@ -105,6 +108,78 @@ class VolcTtsClient:
             return "zh_male_dayi_v2_saturn_bigtts"
         # 未匹配的新角色，默认跟随第一个（女声）
         return "zh_female_mizai_v2_saturn_bigtts"
+    
+    # TTS API单轮对话长度限制常量
+    MAX_DIALOGUE_ROUND_LENGTH = 250  # VolcEngine TTS PodcastTTS API单轮对话最大字符数
+    MIN_SPLIT_RATIO = 0.7  # 分割时最小长度比例，避免产生过短片段
+    
+    def split_long_dialogue(self, role: str, content: str, max_length: int = None) -> List[Dict[str, str]]:
+        """
+        智能分段长对话内容，保持语义完整性
+        
+        Args:
+            role: 角色名称
+            content: 对话内容
+            max_length: 最大长度限制，默认使用 MAX_DIALOGUE_ROUND_LENGTH
+            
+        Returns:
+            分段后的对话列表，每个元素包含 role 和 content
+        """
+        if max_length is None:
+            max_length = self.MAX_DIALOGUE_ROUND_LENGTH
+            
+        if len(content) <= max_length:
+            return [{'role': role, 'content': content}]
+        
+        segments = []
+        remaining_text = content
+        
+        while len(remaining_text) > max_length:
+            # 在安全长度内寻找最佳分割点
+            safe_length = max_length
+            split_pos = -1
+            
+            # 优先级：中文标点 > 英文标点
+            # 中文标点：句号、问号、感叹号
+            chinese_punctuation = '。？！'
+            for punct in chinese_punctuation:
+                pos = remaining_text.rfind(punct, 0, safe_length)
+                if pos > safe_length * self.MIN_SPLIT_RATIO:  # 确保分割后的片段不会过短
+                    split_pos = pos + 1  # 包含标点符号
+                    break
+            
+            # 如果中文标点不可用，尝试英文标点
+            if split_pos == -1:
+                english_punctuation = '.?!'
+                for punct in english_punctuation:
+                    pos = remaining_text.rfind(punct, 0, safe_length)
+                    if pos > safe_length * self.MIN_SPLIT_RATIO:
+                        split_pos = pos + 1  # 包含标点符号
+                        break
+            
+            # 如果没有合适的标点符号，在最大长度处强制分割
+            if split_pos == -1:
+                split_pos = max_length
+            
+            # 提取当前片段
+            current_segment = remaining_text[:split_pos].strip()
+            if current_segment:
+                segments.append({'role': role, 'content': current_segment})
+            
+            # 更新剩余文本
+            remaining_text = remaining_text[split_pos:].strip()
+        
+        # 处理最后一段
+        if remaining_text.strip():
+            segments.append({'role': role, 'content': remaining_text.strip()})
+        
+        # 记录分段信息
+        if len(segments) > 1:
+            logger.info(f"长对话分段: 角色={role}, 原长度={len(content)}, 分段数={len(segments)}")
+            for i, seg in enumerate(segments):
+                logger.debug(f"  段{i+1}: {len(seg['content'])}字符 - {seg['content'][:50]}...")
+        
+        return segments
     
     async def synthesize(self, text: str, **kwargs) -> bytes:
         """合成对话文本为音频"""
