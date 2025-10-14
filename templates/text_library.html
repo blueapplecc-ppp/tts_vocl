@@ -3,13 +3,35 @@
 <div class="p-6 space-y-4">
   <div class="flex items-center justify-between">
     <h2 class="text-lg font-semibold">文本资源库</h2>
-    <form class="flex items-center gap-2" method="get" action="/">
-      <input type="text" name="q" value="{{ q }}" placeholder="搜索标题/上传者" class="border rounded px-3 py-2" />
-      <select name="order" class="border rounded px-3 py-2">
+    <form class="flex items-center gap-2 flex-wrap" method="get" action="/">
+      <input type="text" name="q" value="{{ q }}" placeholder="搜索标题/上传者" class="border rounded px-3 py-2 min-w-[180px]" />
+      <select name="order" class="border rounded px-3 py-2 bg-white">
         <option value="desc" {% if order=='desc' %}selected{% endif %}>时间降序</option>
         <option value="asc" {% if order=='asc' %}selected{% endif %}>时间升序</option>
       </select>
-      <button class="px-4 py-2 bg-blue-600 text-white rounded">搜索</button>
+      
+      <!-- 音频状态筛选 -->
+      <div class="flex items-center gap-1">
+        <label class="text-sm text-gray-600">音频:</label>
+        <select name="audio_filter" onchange="this.form.submit()" class="border rounded px-3 py-2 bg-white">
+          <option value="all" {% if audio_filter == 'all' %}selected{% endif %}>全部</option>
+          <option value="generated" {% if audio_filter == 'generated' %}selected{% endif %}>已生成</option>
+          <option value="not_generated" {% if audio_filter == 'not_generated' %}selected{% endif %}>未生成</option>
+        </select>
+      </div>
+      
+      <!-- 任务状态筛选（前端筛选） -->
+      <div class="flex items-center gap-1">
+        <label class="text-sm text-gray-600">任务:</label>
+        <select id="taskStatusFilter" class="border rounded px-3 py-2 bg-white">
+          <option value="all">全部</option>
+          <option value="failed">仅失败/超时</option>
+          <option value="processing">仅处理中</option>
+        </select>
+      </div>
+      
+      <button class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">搜索</button>
+      <input type="hidden" name="page" value="{{ page }}" />
     </form>
   </div>
 
@@ -17,25 +39,41 @@
   <div class="bg-white border rounded p-4">
     <div class="space-y-3">
       {% for it in items %}
-      <div class="flex items-center justify-between p-3 border rounded">
+      <div class="text-item-row flex items-center justify-between p-3 border rounded" 
+           data-text-id="{{ it.id }}"
+           {% if it.id in task_status_map %}data-task-status="{{ task_status_map[it.id].status }}"{% endif %}>
         <div class="flex items-center gap-3">
           <div>
             <div class="font-medium">
-              <a class="hover:underline" href="/?q={{ q }}&order={{ order }}&page={{ page }}&selected_id={{ it.id }}">{{ it.title }}</a>
+              <a class="hover:underline" href="/?q={{ q }}&order={{ order }}&audio_filter={{ audio_filter }}&page={{ page }}&selected_id={{ it.id }}">{{ it.title }}</a>
             </div>
             <div class="text-sm text-gray-500">用户ID {{ it.user_id }} · {{ it.created_at }}</div>
           </div>
           <a class="text-blue-600 text-sm" href="{{ pub_url(it.oss_object_key) }}" download>下载文本</a>
         </div>
-        <div class="flex items-center gap-3 flex-wrap justify-end">
+        <!-- 🆕 添加唯一容器ID，用于局部刷新 -->
+        <div id="audio-container-{{ it.id }}" class="flex items-center gap-3 flex-wrap justify-end">
           {% if it.id in audios_map %}
             <!-- 情况1: 有音频 → 显示播放器 -->
             {% for a in audios_map[it.id] %}
               <div class="flex items-center gap-2">
-                <audio controls class="h-8">
+                <audio controls class="h-8" preload="metadata">
                   <source src="{{ pub_url(a.oss_object_key) }}" type="audio/mpeg" />
                 </audio>
-                <a class="text-blue-600 text-sm" href="{{ pub_url(a.oss_object_key) }}" download>下载</a>
+                
+                {% if a.file_size < 5000 %}
+                  <!-- 🆕 损坏音频：显示删除按钮 -->
+                  <button 
+                    onclick="deleteCorruptedAudio({{ it.id }}, {{ a.id }})" 
+                    id="del-btn-{{ a.id }}"
+                    class="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
+                    title="删除损坏的音频文件">
+                    🗑️ 删除
+                  </button>
+                {% else %}
+                  <!-- 正常音频：显示下载按钮 -->
+                  <a class="text-blue-600 text-sm" href="{{ pub_url(a.oss_object_key) }}" download>下载</a>
+                {% endif %}
               </div>
             {% endfor %}
           {% elif it.id in task_status_map and task_status_map[it.id].status == 'processing' %}
@@ -64,9 +102,9 @@
     <!-- 分页 -->
     <div class="mt-4 flex justify-end gap-2">
       {% if page > 1 %}
-      <a class="px-3 py-1 border rounded" href="/?q={{ q }}&order={{ order }}&page={{ page-1 }}">上一页</a>
+      <a class="px-3 py-1 border rounded" href="/?q={{ q }}&order={{ order }}&audio_filter={{ audio_filter }}&page={{ page-1 }}">上一页</a>
       {% endif %}
-      <a class="px-3 py-1 border rounded" href="/?q={{ q }}&order={{ order }}&page={{ page+1 }}">下一页</a>
+      <a class="px-3 py-1 border rounded" href="/?q={{ q }}&order={{ order }}&audio_filter={{ audio_filter }}&page={{ page+1 }}">下一页</a>
     </div>
   </div>
 
@@ -131,6 +169,144 @@
       btn.textContent = '重新生成音频';
       btn.className = 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors';
     });
+  }
+
+  // 🆕 删除损坏音频函数（局部刷新）
+  function deleteCorruptedAudio(textId, audioId) {
+    if (!confirm('确定要删除这个损坏的音频吗？\n\n删除后可以重新生成。')) {
+      return;
+    }
+    
+    // 获取容器和按钮
+    const container = document.getElementById('audio-container-' + textId);
+    const btn = document.getElementById('del-btn-' + audioId);
+    
+    if (!container || !btn) {
+      alert('❌ 页面错误：找不到相关元素');
+      return;
+    }
+    
+    // 保存原始HTML（用于错误恢复）
+    const originalHTML = container.innerHTML;
+    
+    // 禁用按钮，显示加载状态
+    btn.disabled = true;
+    btn.textContent = '删除中...';
+    btn.className = 'px-3 py-1 bg-gray-400 text-white text-sm rounded cursor-not-allowed';
+    
+    // 调用删除 API
+    fetch('/api/audio/' + audioId, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(response => {
+      if (!response.ok) {
+        return response.json().then(data => {
+          throw new Error(data.error || '删除失败');
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      if (data.success) {
+        // 🆕 成功：局部替换为"重新生成音频"按钮
+        container.innerHTML = `
+          <button 
+            onclick="generateAudio(${textId})" 
+            id="gen-btn-${textId}"
+            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
+            重新生成音频
+          </button>
+        `;
+        
+        // 显示成功提示
+        let message = '✅ 已删除损坏音频，可以重新生成了';
+        if (data.warning) {
+          message += '\n\n⚠️ ' + data.warning;
+        }
+        showToast(message, data.warning ? 'warning' : 'success');
+      } else {
+        throw new Error(data.error || '删除失败');
+      }
+    })
+    .catch(error => {
+      // 错误：恢复原状
+      container.innerHTML = originalHTML;
+      alert('❌ 删除失败: ' + error.message);
+    });
+  }
+
+  // 🆕 Toast 提示组件（轻量级反馈，3秒自动消失）
+  function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-600' : 
+                    type === 'error' ? 'bg-red-600' : 
+                    type === 'warning' ? 'bg-yellow-600' : 'bg-blue-600';
+    
+    toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-[9999] transition-opacity`;
+    toast.innerHTML = `
+      <div class="${bgColor} rounded-lg p-4">
+        <pre class="whitespace-pre-wrap text-sm font-sans">${message}</pre>
+      </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // 3秒后淡出并移除
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  // 任务状态前端筛选
+  document.getElementById('taskStatusFilter').addEventListener('change', function() {
+    const filterValue = this.value;
+    const rows = document.querySelectorAll('.text-item-row');
+    
+    rows.forEach(row => {
+      const textId = row.dataset.textId;
+      const hasAudio = row.querySelector('audio') !== null;
+      const isProcessing = row.querySelector('.animate-spin') !== null;
+      const isFailed = row.dataset.taskStatus === 'failed' || row.dataset.taskStatus === 'timeout';
+      
+      let shouldShow = true;
+      
+      if (filterValue === 'failed') {
+        // 只显示失败/超时的
+        shouldShow = isFailed;
+      } else if (filterValue === 'processing') {
+        // 只显示处理中的
+        shouldShow = isProcessing;
+      }
+      // 'all' 则显示全部
+      
+      row.style.display = shouldShow ? '' : 'none';
+    });
+    
+    // 更新显示计数
+    updateVisibleCount();
+  });
+
+  // 更新可见记录计数
+  function updateVisibleCount() {
+    const visibleRows = document.querySelectorAll('.text-item-row:not([style*="display: none"])');
+    const totalRows = document.querySelectorAll('.text-item-row').length;
+    
+    // 在页面上显示计数
+    let countElement = document.getElementById('visible-count');
+    if (!countElement) {
+      countElement = document.createElement('div');
+      countElement.id = 'visible-count';
+      countElement.className = 'text-sm text-gray-600 mb-2';
+      const listContainer = document.querySelector('.bg-white.border.rounded.p-4');
+      if (listContainer) {
+        listContainer.insertBefore(countElement, listContainer.firstChild);
+      }
+    }
+    countElement.textContent = `显示 ${visibleRows.length} / ${totalRows} 条记录`;
   }
 </script>
 {% endblock %}

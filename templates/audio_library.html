@@ -21,7 +21,7 @@
         <div class="text-sm text-gray-500">用户ID {{ a.user_id }} · {{ a.created_at }} · 时长 {{ a.duration_sec or '—' }}s</div>
       </div>
       <div class="flex items-center gap-2">
-        <audio controls class="h-8">
+        <audio controls class="h-8" preload="metadata">
           <source src="{{ pub_url(a.oss_object_key) }}" type="audio/mpeg" />
         </audio>
         <a href="{{ pub_url(a.oss_object_key) }}" class="text-blue-600 text-sm" download>下载</a>
