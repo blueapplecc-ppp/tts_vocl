@@ -153,20 +153,28 @@ class TaskService:
                         file_size = existing_audio.file_size
                     else:
                         logger.info(f"创建新的音频记录: text_id={text_id}")
+                        
+                        # 获取OSS文件实际大小
+                        try:
+                            file_size = self.oss_client.get_object_size(object_key)
+                            logger.info(f"获取OSS文件大小: {file_size} 字节")
+                        except Exception as e:
+                            logger.warning(f"获取OSS文件大小失败: {e}, 设为0")
+                            file_size = 0
+                        
                         # 创建新记录
                         audio_row = TtsAudio(
                             text_id=text_id,
                             user_id=user_id,
                             filename=filename,
                             oss_object_key=object_key,
-                            file_size=0,  # 无法获取实际大小，设为0
+                            file_size=file_size,  # 使用实际大小
                             version_num=1
                         )
                         s.add(audio_row)
                         s.commit()
                         audio_id = audio_row.id
-                        file_size = 0
-                        logger.info(f"新音频记录创建成功: audio_id={audio_id}")
+                        logger.info(f"新音频记录创建成功: audio_id={audio_id}, file_size={file_size}")
                     
                     # 通知监控器完成
                     if self.monitor:

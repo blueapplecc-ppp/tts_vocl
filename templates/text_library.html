@@ -28,14 +28,34 @@
           <a class="text-blue-600 text-sm" href="{{ pub_url(it.oss_object_key) }}" download>下载文本</a>
         </div>
         <div class="flex items-center gap-3 flex-wrap justify-end">
-          {% for a in audios_map.get(it.id, []) %}
-            <div class="flex items-center gap-2">
-              <audio controls class="h-8">
-                <source src="{{ pub_url(a.oss_object_key) }}" type="audio/mpeg" />
-              </audio>
-              <a class="text-blue-600 text-sm" href="{{ pub_url(a.oss_object_key) }}" download>下载</a>
+          {% if it.id in audios_map %}
+            <!-- 情况1: 有音频 → 显示播放器 -->
+            {% for a in audios_map[it.id] %}
+              <div class="flex items-center gap-2">
+                <audio controls class="h-8">
+                  <source src="{{ pub_url(a.oss_object_key) }}" type="audio/mpeg" />
+                </audio>
+                <a class="text-blue-600 text-sm" href="{{ pub_url(a.oss_object_key) }}" download>下载</a>
+              </div>
+            {% endfor %}
+          {% elif it.id in task_status_map and task_status_map[it.id].status == 'processing' %}
+            <!-- 情况2: 任务进行中 → 显示处理状态（不可点击） -->
+            <div class="flex items-center gap-2 text-gray-500">
+              <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span class="text-sm">正在生成音频，请稍候...</span>
             </div>
-          {% endfor %}
+          {% else %}
+            <!-- 情况3: 无音频且无任务 → 显示"重新生成音频"按钮 -->
+            <button 
+              onclick="generateAudio({{ it.id }})" 
+              id="gen-btn-{{ it.id }}"
+              class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
+              重新生成音频
+            </button>
+          {% endif %}
         </div>
       </div>
       {% endfor %}
@@ -63,11 +83,54 @@
 {% endblock %}
 {% block extra_scripts %}
 <script>
+  // 原有的状态栏更新
   document.addEventListener('DOMContentLoaded', function(){
     if (window.AppStatusBar) {
       AppStatusBar.update({event:'page_loaded', page:'text_library', q:'{{ q }}', order:'{{ order }}', pageNo:{{ page }} });
       AppStatusBar.update({event:'query_done', items_count: {{ items|length }}, selected_id: '{{ selected_text and selected_text.id or "" }}' });
     }
   });
+
+  // 生成音频函数
+  function generateAudio(textId) {
+    const btn = document.getElementById('gen-btn-' + textId);
+    if (!btn) return;
+    
+    // 禁用按钮，显示处理中
+    btn.disabled = true;
+    btn.textContent = '处理中...';
+    btn.className = 'px-4 py-2 bg-gray-400 text-white rounded cursor-not-allowed';
+    
+    // 调用API
+    fetch('/api/task/retry/' + textId, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        alert('✅ 任务已提交，正在重新生成音频...\n\n页面将自动刷新以查看处理状态。');
+        // 刷新页面
+        window.location.reload();
+      } else {
+        // 显示错误信息
+        alert('❌ ' + (data.error || '提交失败'));
+        // 恢复按钮状态
+        btn.disabled = false;
+        btn.textContent = '重新生成音频';
+        btn.className = 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors';
+      }
+    })
+    .catch(error => {
+      // 网络错误
+      alert('❌ 网络错误: ' + error.message);
+      // 恢复按钮状态
+      btn.disabled = false;
+      btn.textContent = '重新生成音频';
+      btn.className = 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors';
+    });
+  }
 </script>
 {% endblock %}

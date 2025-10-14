@@ -44,11 +44,34 @@ def index():
         if selected_id:
             selected_text = s.get(TtsText, int(selected_id))
 
+    # 获取任务状态（带异常保护）
+    task_status_map = {}
+    monitor = current_app.config.get('MONITOR')
+    if monitor:
+        try:
+            for text in items:
+                status = monitor.get_task_status(text.id)
+                if status:
+                    task_status_map[text.id] = status
+        except Exception as e:
+            logger.warning(f"获取任务状态失败: {e}")
+            # 继续执行，task_status_map 为空
+
     # 获取服务
     audio_service = current_app.config['AUDIO_SERVICE']
     pub_url = audio_service.get_audio_url
 
-    return render_template('text_library.html', items=items, audios_map=audios_map, pub_url=pub_url, q=q, order=order, page=page, selected_text=selected_text)
+    return render_template(
+        'text_library.html', 
+        items=items, 
+        audios_map=audios_map,
+        task_status_map=task_status_map,
+        pub_url=pub_url, 
+        q=q, 
+        order=order, 
+        page=page, 
+        selected_text=selected_text
+    )
 
 
 @bp.get('/audios')
@@ -379,25 +402,53 @@ def diagnose_tts():
 
 @bp.route('/api/task/retry/<int:text_id>', methods=['POST'])
 def retry_task(text_id):
-    """重试失败的任务"""
+    """重试失败的任务或重新生成音频
+    
+    支持场景:
+    1. 实时重试: 任务刚失败，Monitor中有状态
+    2. 历史补录: 服务重启后，Monitor清空，但数据库中无音频
+    
+    检查逻辑:
+    - 文本是否存在（数据库）
+    - 音频是否已存在（数据库）
+    - 任务是否正在处理（Monitor）
+    """
     monitor = current_app.config['MONITOR']
     status = monitor.get_task_status(text_id)
     
-    if status is None:
-        return jsonify({"error": "任务不存在"}), 404
+    # 检查数据库中的文本和音频状态
+    with get_session() as s:
+        # 1. 检查文本是否存在
+        text_row = s.get(TtsText, text_id)
+        if not text_row or text_row.is_deleted:
+            return jsonify({"error": "文本不存在"}), 404
+        
+        # 2. 检查是否已有有效音频
+        audio = s.query(TtsAudio).filter(
+            TtsAudio.text_id == text_id,
+            TtsAudio.is_deleted == 0
+        ).first()
+        
+        if audio:
+            return jsonify({"error": "音频已存在，无需重试"}), 400
+        
+        # 3. 检查monitor中是否有正在处理的任务
+        if status and status['status'] == 'processing':
+            return jsonify({"error": "任务正在处理中，请稍候"}), 400
     
-    if status['status'] not in ['failed', 'timeout']:
-        return jsonify({"error": "只有失败或超时的任务才能重试"}), 400
-    
+    # 允许重试的情况：1）没有音频 2）没有进行中任务
     # 获取用户ID
     auth_enabled = current_app.config.get('AUTH_ENABLED', False)
     user_id = get_current_user_id(auth_enabled, request)
     
     try:
         # 重新提交任务
-        executor.submit(run_tts_and_upload, text_id, user_id)
+        app_obj = current_app._get_current_object()
+        executor.submit(run_tts_and_upload, text_id, user_id, app_obj)
+        logger.info(f"重试任务已提交: text_id={text_id}, user_id={user_id}")
         return jsonify({"success": True, "message": "任务已重新提交"})
     except Exception as e:
+        logger.error(f"重试任务提交失败: text_id={text_id}, error={e}")
         return jsonify({"error": f"重试失败: {str(e)}"}), 500
 
 

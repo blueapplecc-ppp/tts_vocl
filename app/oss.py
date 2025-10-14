@@ -40,6 +40,26 @@ class OssClient:
         except Exception:
             return False
 
+    def get_object_size(self, object_key: str) -> int:
+        """获取OSS对象的文件大小
+        
+        Args:
+            object_key: OSS对象键
+            
+        Returns:
+            文件大小（字节）
+            
+        Raises:
+            Exception: 如果文件不存在或获取失败
+        """
+        try:
+            # 使用 head_object 获取文件元信息（不下载文件内容）
+            obj_meta = self.bucket.head_object(object_key)
+            file_size = int(obj_meta.headers.get('Content-Length', 0))
+            return file_size
+        except Exception as e:
+            raise Exception(f"获取文件大小失败: {object_key}, {e}")
+
     @staticmethod
     def _strip_scheme(endpoint: str) -> str:
         return endpoint.replace('https://', '').replace('http://', '')
