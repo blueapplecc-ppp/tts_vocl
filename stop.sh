@@ -6,7 +6,7 @@
 set -e
 
 # 配置变量
-PROJECT_DIR="/data/b2v/tts_vocl"
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="${PROJECT_DIR}/run"
 PID_FILE="${LOG_DIR}/gunicorn.pid"
 

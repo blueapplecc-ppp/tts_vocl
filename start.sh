@@ -6,7 +6,7 @@
 set -e  # 遇到错误立即退出
 
 # 配置变量
-PROJECT_DIR="/data/b2v/tts_vocl"
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_DIR="${PROJECT_DIR}/.venv"
 LOG_DIR="${PROJECT_DIR}/run"
 PID_FILE="${LOG_DIR}/gunicorn.pid"
