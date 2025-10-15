@@ -2,6 +2,7 @@ import os
 import time
 import oss2
 from typing import Optional, Callable
+from urllib.parse import quote
 
 
 class OssClient:
@@ -28,7 +29,9 @@ class OssClient:
     def public_url(self, object_key: str) -> str:
         # Bucket 配置为公开读时，直接拼接公网URL
         # 也可使用 bucket.sign_url 生成临时签名，但本项目要求公开读无需签名
-        return f"https://{self.bucket_name}.{self._strip_scheme(self.endpoint)}/{object_key}"
+        # URL 编码 object_key 以处理特殊字符（如 +, 空格, & 等），但保留路径分隔符 '/'
+        encoded_key = quote(object_key, safe='/')
+        return f"https://{self.bucket_name}.{self._strip_scheme(self.endpoint)}/{encoded_key}"
 
     def object_exists(self, object_key: str) -> bool:
         """检查对象是否存在"""

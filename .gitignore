@@ -33,6 +33,7 @@ logs/
 *.db
 instance/
 .pytest_cache/
+run/
 
 # 系统文件
 .DS_Store
@@ -66,7 +67,13 @@ Thumbs.db
 test_*.txt
 test_*.py
 *_test.py
+test_validation.html
 
 # 外部数据目录
 /data/
 /Users/gold/codes/
+
+# 迁移脚本与临时文档
+migrations/
+docs/TEMP_*.md
+docs/ANALYSIS_*.md

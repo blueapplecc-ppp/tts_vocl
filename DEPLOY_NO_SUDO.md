@@ -140,7 +140,7 @@ if [ -f run/tts_vocl.pid ]; then
 fi
 echo "Starting gunicorn on ${BIND_HOST}:${BIND_PORT} ..."
 nohup .venv/bin/gunicorn -w ${WORKERS} -k gthread --threads ${THREADS} -b ${BIND_HOST}:${BIND_PORT} \
-  --timeout ${TIMEOUT} --access-logfile - --error-logfile - run_refactored_app:app \
+  --timeout ${TIMEOUT} --access-logfile - --error-logfile - dev_server:app \
   > logs/server.out 2>&1 &
 echo $! > run/tts_vocl.pid
 echo "Started PID \$(cat run/tts_vocl.pid)"

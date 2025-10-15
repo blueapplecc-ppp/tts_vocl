@@ -20,15 +20,6 @@
         </select>
       </div>
       
-      <!-- 任务状态筛选（前端筛选） -->
-      <div class="flex items-center gap-1">
-        <label class="text-sm text-gray-600">任务:</label>
-        <select id="taskStatusFilter" class="border rounded px-3 py-2 bg-white">
-          <option value="all">全部</option>
-          <option value="failed">仅失败/超时</option>
-          <option value="processing">仅处理中</option>
-        </select>
-      </div>
       
       <button class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">搜索</button>
       <input type="hidden" name="page" value="{{ page }}" />

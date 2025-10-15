@@ -9,6 +9,7 @@ from .protocols import (
     receive_message, wait_for_event, start_connection, 
     finish_connection, start_session, finish_session
 )
+from .exceptions import ConcurrencyQuotaExceeded, TtsServerError
 
 logger = logging.getLogger(__name__)
 
@@ -195,10 +196,8 @@ class VolcTtsClient:
         logger.info(f"{ctx}重置角色记录")
         
         if not self.access_token:
-            logger.warning(f"{ctx}TTS Access Token未配置，使用测试数据")
-            test_audio = self._generate_test_audio(text)
-            logger.info(f"{ctx}测试音频生成完成: {len(test_audio)} 字节")
-            return test_audio
+            logger.error(f"{ctx}TTS Access Token未配置")
+            raise ValueError("TTS Access Token未配置，无法合成音频")
         
         try:
             logger.info(f"{ctx}步骤1: 构建对话请求参数")
@@ -231,11 +230,7 @@ class VolcTtsClient:
             logger.error(f"{ctx}=== TTS客户端合成失败 ===")
             logger.error(f"{ctx}错误类型: {type(e).__name__}")
             logger.error(f"{ctx}错误信息: {str(e)}")
-            # 如果真实TTS失败，返回测试数据
-            logger.info(f"{ctx}使用测试数据作为备选方案")
-            test_audio = self._generate_test_audio(text)
-            logger.info(f"{ctx}测试音频生成完成: {len(test_audio)} 字节")
-            return test_audio
+            raise  # 直接抛出异常，不返回假音频
     
     async def _synthesize_with_websocket(self, req_params: Dict[str, Any], headers: Dict[str, str]) -> bytes:
         """通过WebSocket进行TTS合成"""
@@ -250,24 +245,19 @@ class VolcTtsClient:
             
             # 1. 开始连接
             await start_connection(websocket)
-            logger.info("发送: StartConnection")
             
             # 2. 等待连接确认
             await wait_for_event(websocket, MsgType.FullServerResponse, EventType.ConnectionStarted)
-            logger.info("收到: ConnectionStarted")
             
             # 3. 开始会话
             session_id = str(uuid.uuid4())
             await start_session(websocket, json.dumps(req_params).encode(), session_id)
-            logger.info(f"发送: StartSession (ID: {session_id[:8]}...)")
             
             # 4. 等待会话确认
             await wait_for_event(websocket, MsgType.FullServerResponse, EventType.SessionStarted)
-            logger.info("收到: SessionStarted")
             
             # 5. 结束会话（开始处理）
             await finish_session(websocket, session_id)
-            logger.info("发送: FinishSession")
             
             # 6. 接收响应数据
             logger.info("开始接收音频数据...")
@@ -281,9 +271,16 @@ class VolcTtsClient:
                 
                 # 错误信息
                 elif msg.type == MsgType.Error:
-                    error_msg = msg.payload.decode()
-                    logger.error(f"服务器错误: {error_msg}")
-                    break
+                    error_payload = msg.payload.decode()
+                    error_data = json.loads(error_payload) if error_payload.startswith('{') else {"error": error_payload}
+                    error_code = msg.error_code
+                    
+                    if error_code == 45000292:  # 并发配额超限
+                        logger.error(f"🚫 并发配额超限: {error_data.get('error', '')}")
+                        raise ConcurrencyQuotaExceeded(error_data.get('error', 'quota exceeded'))
+                    else:
+                        logger.error(f"服务器错误 [Code {error_code}]: {error_data}")
+                        raise TtsServerError(error_code, error_data)
                 
                 elif msg.type == MsgType.FullServerResponse:
                     # 播客轮次结束
@@ -327,12 +324,6 @@ class VolcTtsClient:
             if websocket:
                 await websocket.close()
 
-    def _generate_test_audio(self, text: str) -> bytes:
-        """生成测试音频数据"""
-        logger.info("生成测试音频数据")
-        # 创建一个简单的测试音频数据
-        test_audio_data = b'\xff\xfb\x90\x00' + b'\x00' * 1000
-        return test_audio_data
 
 
 def compute_audio_filename(base_name_no_ext: str, char_count: int, next_version: int) -> str:
@@ -341,20 +332,6 @@ def compute_audio_filename(base_name_no_ext: str, char_count: int, next_version:
     version = f"v{next_version:02d}"
     return f"{base_name_no_ext}_{length_tag}_{version}.mp3"
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     
 async def _safe_wait(websocket, timeout, recv_once=False):

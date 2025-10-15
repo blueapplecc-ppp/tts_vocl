@@ -21,13 +21,36 @@ def index():
     order = request.args.get('order', 'desc')
     page = int(request.args.get('page', 1))
     selected_id = request.args.get('selected_id')
+    audio_filter = request.args.get('audio_filter', 'all')  # 新增：音频筛选参数
     page_size = 10
 
     with get_session() as s:
-        stmt = select(TtsText).where(TtsText.is_deleted == 0)
+        # 根据音频筛选条件构建不同的查询
+        if audio_filter == 'generated':
+            # 已生成：INNER JOIN
+            stmt = select(TtsText).join(
+                TtsAudio, 
+                (TtsText.id == TtsAudio.text_id) & (TtsAudio.is_deleted == 0)
+            ).where(TtsText.is_deleted == 0)
+        elif audio_filter == 'not_generated':
+            # 未生成：LEFT JOIN + WHERE audio.id IS NULL
+            stmt = select(TtsText).outerjoin(
+                TtsAudio,
+                (TtsText.id == TtsAudio.text_id) & (TtsAudio.is_deleted == 0)
+            ).where(TtsText.is_deleted == 0, TtsAudio.id == None)
+        else:
+            # 全部：不 JOIN
+            stmt = select(TtsText).where(TtsText.is_deleted == 0)
+        
+        # 搜索条件
         if q:
             like = f"%{q}%"
             stmt = stmt.where(TtsText.title.like(like))
+        
+        # 去重（JOIN 可能导致重复）
+        stmt = stmt.distinct()
+        
+        # 排序和分页
         stmt = stmt.order_by(desc(TtsText.created_at) if order == 'desc' else asc(TtsText.created_at))
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         items = s.execute(stmt).scalars().all()
@@ -70,7 +93,8 @@ def index():
         q=q, 
         order=order, 
         page=page, 
-        selected_text=selected_text
+        selected_text=selected_text,
+        audio_filter=audio_filter  # 传递筛选参数到模板
     )
 
 
@@ -572,3 +596,60 @@ def monitor_stats():
     except Exception as e:
         logger.error(f"监控API错误: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@bp.delete('/api/audio/<int:audio_id>')
+def delete_corrupted_audio(audio_id):
+    """删除损坏的音频（数据库 + OSS）
+    
+    仅允许删除 file_size < 5000 的损坏音频
+    """
+    # 使用模块级别的logger和配置中的oss_client
+    oss_client = current_app.config['OSS_CLIENT']
+    
+    with get_session() as s:
+        # 使用悲观锁防止并发删除
+        audio = s.query(TtsAudio).filter(
+            TtsAudio.id == audio_id,
+            TtsAudio.is_deleted == 0
+        ).with_for_update().first()
+        
+        # 检查1：音频必须存在
+        if not audio:
+            return jsonify({"success": False, "error": "音频不存在或已被删除"}), 404
+        
+        # 检查2：只能删除损坏的音频
+        if audio.file_size >= 5000:
+            return jsonify({"success": False, "error": "只能删除损坏的音频（小于5000字节）"}), 400
+        
+        text_id = audio.text_id
+        oss_key = audio.oss_object_key
+        file_size = audio.file_size
+        
+        # 原子删除：先删除OSS，成功后才删除数据库
+        try:
+            # 步骤1: 删除OSS文件
+            oss_client.bucket.delete_object(oss_key)
+            logger.info(f"✅ 已删除OSS文件: {oss_key}")
+            
+            # 步骤2: OSS删除成功后，才删除数据库记录
+            s.delete(audio)
+            s.commit()
+            
+            logger.info(f"✅ 用户删除损坏音频成功: text_id={text_id}, audio_id={audio_id}, size={file_size}")
+            
+            return jsonify({
+                "success": True,
+                "text_id": text_id,
+                "message": "已删除损坏音频"
+            })
+            
+        except Exception as e:
+            # OSS删除失败，回滚事务，保证数据一致性
+            s.rollback()
+            logger.error(f"❌ 删除失败: OSS={oss_key}, 错误={e}")
+            
+            return jsonify({
+                "success": False,
+                "error": f"删除失败: {str(e)}"
+            }), 500

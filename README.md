@@ -80,7 +80,7 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 export FLASK_ENV=development
 
 # 启动应用
-python run_refactored_app.py  # 默认监听 8082
+python dev_server.py  # 开发环境启动 (默认监听 8082)
 ```
 
 **重要提醒：每次启动项目前都必须先激活虚拟环境！**
@@ -153,7 +153,7 @@ python run_refactored_app.py  # 默认监听 8082
   - `example_db_config.json`（配置示例，实际放置于项目父目录 `../db_config.json`）
   - `scripts/`
     - `deploy.sh`（无 sudo 用户态一键部署脚本）
-- `run_refactored_app.py`（开发启动入口，禁用 reloader）
+- `dev_server.py`（开发环境启动脚本，使用Flask内置服务器）
 - `requirements.txt`
 - `schema.sql`（建库与索引）
 - `DEPLOY_NO_SUDO.md`（无 sudo 首次部署指南）

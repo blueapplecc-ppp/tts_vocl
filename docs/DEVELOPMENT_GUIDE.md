@@ -67,7 +67,7 @@ mysql -u root -p tts_vocl < schema.sql
 ### 6. 启动开发服务器
 ```bash
 export FLASK_ENV=development
-python run_refactored_app.py
+python dev_server.py
 ```
 
 ## 代码规范
@@ -279,7 +279,7 @@ app.config.update(
 pip install gunicorn
 
 # 启动生产服务器
-gunicorn -w 4 -b 0.0.0.0:8082 run_refactored_app:app
+gunicorn -w 4 -b 0.0.0.0:8082 dev_server:app
 ```
 
 ### 3. 使用Nginx反向代理

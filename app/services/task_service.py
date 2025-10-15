@@ -4,6 +4,7 @@
 """
 
 import time
+import asyncio
 import logging
 import threading
 from sqlalchemy.exc import IntegrityError
@@ -11,11 +12,13 @@ from typing import Dict, Any, Optional
 from ..models import get_session, TtsText, TtsAudio
 from .tts_service import TTSServiceInterface
 from .audio_service import AudioService
+from ..exceptions import ConcurrencyQuotaExceeded
 
 logger = logging.getLogger(__name__)
 
 # 限制同时发起的TTS并发（基础限流）
-_TTS_CONCURRENCY_SEMA = threading.BoundedSemaphore(value=8)
+# 4 workers × 2 = 8 全局并发，避免触发火山引擎配额限制
+_TTS_CONCURRENCY_SEMA = threading.BoundedSemaphore(value=2)
 
 class TaskService:
     """任务服务 - 支持强幂等和超时处理"""
@@ -136,63 +139,81 @@ class TaskService:
                 logger.info(f"OSS文件存在检查结果: {oss_exists}")
                 
                 if oss_exists:
-                    logger.info(f"音频文件已存在，跳过生成: {object_key}")
+                    # 智能幂等检查：不仅检查存在，还要检查质量
+                    logger.info(f"音频文件已存在，检查质量: {object_key}")
                     
-                    # 检查数据库是否已有记录
-                    logger.info(f"检查数据库音频记录: text_id={text_id}")
-                    existing_audio = s.query(TtsAudio).filter(
-                        TtsAudio.text_id == text_id,
-                        TtsAudio.oss_object_key == object_key,
-                        TtsAudio.is_deleted == 0
-                    ).first()
+                    # 获取OSS文件实际大小
+                    try:
+                        file_size = self.oss_client.get_object_size(object_key)
+                        logger.info(f"获取OSS文件大小: {file_size} 字节")
+                    except Exception as e:
+                        logger.warning(f"获取OSS文件大小失败: {e}, 将重新生成")
+                        file_size = 0
                     
-                    if existing_audio:
-                        logger.info(f"找到现有音频记录: audio_id={existing_audio.id}")
-                        # 使用现有记录
-                        audio_id = existing_audio.id
-                        file_size = existing_audio.file_size
-                    else:
-                        logger.info(f"创建新的音频记录: text_id={text_id}")
-                        
-                        # 获取OSS文件实际大小
+                    # 质量检查：小于5KB视为损坏文件
+                    MIN_VALID_AUDIO_SIZE = 5000
+                    if file_size < MIN_VALID_AUDIO_SIZE:
+                        # 发现损坏文件，自动清理并重新生成
+                        logger.warning(f"🗑️  发现损坏音频文件(size={file_size}B < {MIN_VALID_AUDIO_SIZE}B)，删除重新生成: {object_key}")
                         try:
-                            file_size = self.oss_client.get_object_size(object_key)
-                            logger.info(f"获取OSS文件大小: {file_size} 字节")
+                            self.oss_client.bucket.delete_object(object_key)
+                            logger.info(f"✅ 已删除损坏OSS文件: {object_key}")
                         except Exception as e:
-                            logger.warning(f"获取OSS文件大小失败: {e}, 设为0")
-                            file_size = 0
+                            logger.error(f"❌ 删除损坏OSS文件失败: {e}，仍将尝试重新生成")
                         
-                        # 创建新记录
-                        audio_row = TtsAudio(
-                            text_id=text_id,
-                            user_id=user_id,
-                            filename=filename,
-                            oss_object_key=object_key,
-                            file_size=file_size,  # 使用实际大小
-                            version_num=1
-                        )
-                        s.add(audio_row)
-                        s.commit()
-                        audio_id = audio_row.id
-                        logger.info(f"新音频记录创建成功: audio_id={audio_id}, file_size={file_size}")
-                    
-                    # 通知监控器完成
-                    if self.monitor:
-                        logger.info(f"通知监控器任务完成: text_id={text_id}")
-                        audio_service = AudioService(self.oss_client)
-                        audio_url = audio_service.get_audio_url(object_key)
-                        logger.info(f"音频URL: {audio_url}")
-                        self.monitor.complete_task(text_id, audio_url, filename)
-                    
-                    return {
-                        "success": True,
-                        "text_id": text_id,
-                        "audio_id": audio_id,
-                        "filename": filename,
-                        "file_size": file_size,
-                        "skipped": True,
-                        "message": "使用现有音频文件"
-                    }
+                        # 标记为不存在，继续正常生成流程
+                        oss_exists = False
+                    else:
+                        # 文件正常，执行原有幂等逻辑
+                        logger.info(f"✅ 音频文件有效(size={file_size}B)，跳过生成: {object_key}")
+                        
+                        # 检查数据库是否已有记录
+                        logger.info(f"检查数据库音频记录: text_id={text_id}")
+                        existing_audio = s.query(TtsAudio).filter(
+                            TtsAudio.text_id == text_id,
+                            TtsAudio.oss_object_key == object_key,
+                            TtsAudio.is_deleted == 0
+                        ).first()
+                        
+                        if existing_audio:
+                            logger.info(f"找到现有音频记录: audio_id={existing_audio.id}")
+                            # 使用现有记录
+                            audio_id = existing_audio.id
+                            file_size = existing_audio.file_size
+                        else:
+                            logger.info(f"创建新的音频记录: text_id={text_id}")
+                            
+                            # 创建新记录
+                            audio_row = TtsAudio(
+                                text_id=text_id,
+                                user_id=user_id,
+                                filename=filename,
+                                oss_object_key=object_key,
+                                file_size=file_size,  # 使用实际大小
+                                version_num=1
+                            )
+                            s.add(audio_row)
+                            s.commit()
+                            audio_id = audio_row.id
+                            logger.info(f"新音频记录创建成功: audio_id={audio_id}, file_size={file_size}")
+                        
+                        # 通知监控器完成
+                        if self.monitor:
+                            logger.info(f"通知监控器任务完成: text_id={text_id}")
+                            audio_service = AudioService(self.oss_client)
+                            audio_url = audio_service.get_audio_url(object_key)
+                            logger.info(f"音频URL: {audio_url}")
+                            self.monitor.complete_task(text_id, audio_url, filename)
+                        
+                        return {
+                            "success": True,
+                            "text_id": text_id,
+                            "audio_id": audio_id,
+                            "filename": filename,
+                            "file_size": file_size,
+                            "skipped": True,
+                            "message": "使用现有音频文件"
+                        }
                 
                 # 生成音频
                 logger.info(f"步骤4: 开始TTS音频生成 - text_id={text_id}")
@@ -202,11 +223,14 @@ class TaskService:
                     audio_data = await self.tts_service.synthesize_text(text_row.content, text_id=text_id)
                 finally:
                     _TTS_CONCURRENCY_SEMA.release()
-                logger.info(f"TTS生成完成: 音频数据大小={len(audio_data)} 字节")
+                audio_size = len(audio_data)
+                logger.info(f"TTS生成完成: 音频数据大小={audio_size} 字节")
+                if audio_size < 10240:
+                    logger.warning(f"text_id={text_id} 合成音频异常偏小: size={audio_size} 字节")
                 
                 # 上传到OSS
                 logger.info(f"步骤5: 上传音频到OSS - text_id={text_id}")
-                logger.info(f"上传参数: object_key={object_key}, size={len(audio_data)}")
+                logger.info(f"上传参数: object_key={object_key}, size={audio_size}")
                 self.oss_client.upload_bytes(
                     object_key, 
                     audio_data, 
@@ -265,6 +289,22 @@ class TaskService:
                     "file_size": len(audio_data),
                     "duration": duration
                 }
+                
+        except ConcurrencyQuotaExceeded as e:
+            # 并发配额超限，延迟后重试
+            duration = time.time() - start_time
+            logger.warning(f"=== TTS任务配额超限 ===")
+            logger.warning(f"text_id={text_id} 触发并发配额超限（错误码45000292）")
+            logger.warning(f"执行时间: {duration:.2f}s")
+            
+            # 通知监控器失败（便于前端显示）
+            if self.monitor:
+                self.monitor.fail_task(text_id, f"配额超限，稍后自动重试: {str(e)}")
+            
+            # 延迟60秒后重新抛出，让调用方决定是否重试
+            logger.info(f"延迟60秒以缓解配额压力...")
+            await asyncio.sleep(60)
+            raise
                 
         except Exception as e:
             duration = time.time() - start_time
