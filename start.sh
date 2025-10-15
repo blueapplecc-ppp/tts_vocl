@@ -15,10 +15,10 @@ LOG_FILE="${LOG_DIR}/gunicorn.log"
 # 应用配置
 HOST="0.0.0.0"
 PORT="8082"
-WORKERS="4"                    # 4个worker进程（匹配CPU核心+容错）
-TIMEOUT="240"                  # 4分钟超时（防止worker卡死）
-MAX_REQUESTS="1000"           # 每个worker处理1000个请求后重启（防止内存泄漏）
-MAX_REQUESTS_JITTER="50"      # 重启时间随机抖动±50（避免同时重启）
+WORKERS="4"
+TIMEOUT="240"
+MAX_REQUESTS="1000"
+MAX_REQUESTS_JITTER="100" 
 
 # 颜色定义
 GREEN='\033[0;32m'
@@ -26,15 +26,36 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# 检查并清理现有进程
+# 检查现有进程
 echo -e "${YELLOW}🔍 检查现有gunicorn进程...${NC}"
 EXISTING_PIDS=$(ps aux | grep "[g]unicorn.*8082.*app:create_app" | awk '{print $2}' | tr '\n' ' ')
 if [ -n "$EXISTING_PIDS" ]; then
-    echo -e "${YELLOW}⚠️  发现现有gunicorn进程: $EXISTING_PIDS${NC}"
-    echo -e "${YELLOW}正在清理现有进程...${NC}"
-    echo "$EXISTING_PIDS" | xargs kill -9 2>/dev/null || true
-    sleep 2
-    echo -e "${GREEN}✅ 现有进程已清理${NC}"
+    echo -e "${YELLOW}⚠️  服务已在运行！${NC}"
+    echo -e "   进程PID: ${GREEN}$EXISTING_PIDS${NC}"
+    
+    # 显示服务状态信息
+    if [ -f "$PID_FILE" ]; then
+        PID=$(cat "$PID_FILE")
+        echo -e "   主进程PID: ${GREEN}$PID${NC}"
+    fi
+    
+    # 检查端口监听状态
+    PORT_STATUS=$(ss -tuln | grep ":8082\s" | wc -l)
+    if [ "$PORT_STATUS" -gt 0 ]; then
+        echo -e "   端口状态: ${GREEN}正在监听${NC}"
+    else
+        echo -e "   端口状态: ${RED}未监听${NC}"
+    fi
+    
+    echo -e ""
+    echo -e "${YELLOW}📝 服务管理选项:${NC}"
+    echo -e "   💊 查看状态: ${GREEN}./health.sh${NC}"
+    echo -e "   🔄 重启服务: ${GREEN}./restart.sh${NC}"
+    echo -e "   🛑 停止服务: ${GREEN}./stop.sh${NC}"
+    echo -e ""
+    echo -e "${RED}❌ 启动失败：服务已在运行${NC}"
+    echo -e "${YELLOW}💡 如需强制重启，请使用: ./restart.sh${NC}"
+    exit 1
 fi
 
 # 检查PID文件

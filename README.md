@@ -85,6 +85,30 @@ python dev_server.py  # 开发环境启动 (默认监听 8082)
 
 **重要提醒：每次启动项目前都必须先激活虚拟环境！**
 
+## 服务管理脚本
+
+项目提供了便捷的服务管理脚本：
+
+```bash
+# 启动服务（如果服务已运行，会提示并退出）
+./start.sh
+
+# 重启服务（先停止再启动）
+./restart.sh
+
+# 停止服务
+./stop.sh
+
+# 健康检查
+./health.sh
+```
+
+**脚本行为说明：**
+- `start.sh`: 仅在服务未运行时启动，避免重复启动
+- `restart.sh`: 强制重启服务，先停止再启动
+- `stop.sh`: 优雅停止服务
+- `health.sh`: 检查服务状态和健康度
+
 ## 部署（无 sudo 环境）
 - 参考根目录文档：`DEPLOY_NO_SUDO.md`
 - 一键脚本：`docs/scripts/deploy.sh`（在项目根目录执行，生成 `./start.sh`、`./stop.sh`、`./restart.sh`、`./health.sh`）

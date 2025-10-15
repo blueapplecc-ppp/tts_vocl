@@ -155,7 +155,12 @@ tts_vocl/
 3. 安装依赖：`pip install -r requirements.txt`
 4. 配置数据库：执行`schema.sql`
 5. 配置外部文件：`db_config.json`
-6. 启动服务：`python dev_server.py`（开发环境）或 `./start.sh`（生产环境）
+6. 启动服务：
+   - 开发环境：`python dev_server.py`
+   - 生产环境：`./start.sh`（仅在服务未运行时启动）
+   - 重启服务：`./restart.sh`
+   - 停止服务：`./stop.sh`
+   - 健康检查：`./health.sh`
 
 ## 监控和维护
 
