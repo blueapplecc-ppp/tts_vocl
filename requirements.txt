@@ -10,3 +10,4 @@ tenacity==8.5.0
 gunicorn==21.2.0
 websockets==12.0
 mutagen==1.47.0
+redis==5.0.1

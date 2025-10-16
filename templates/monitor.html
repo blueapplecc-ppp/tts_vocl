@@ -1,32 +1,36 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="p-6">
-  <h2 class="text-2xl font-bold mb-6">系统监控</h2>
+  <div class="p-6">
+  <h2 class="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">系统监控</h2>
   
   <!-- 指标卡片 -->
   <div class="grid grid-cols-4 gap-4 mb-6">
-    <div class="bg-white p-6 rounded shadow">
-      <div class="text-gray-500 text-sm">活跃任务</div>
+    <div class="bg-white p-6 rounded shadow dark:bg-gray-800 dark:text-gray-100">
+      <div class="text-gray-500 text-sm dark:text-gray-300">活跃任务</div>
       <div class="text-3xl font-bold mt-2">
         <span id="active-tasks">0</span>/<span id="max-concurrent">8</span>
       </div>
+      <div class="text-sm text-gray-500 mt-2 space-x-3">
+        <span class="text-green-600">运行中 <span id="running-tasks">0</span></span>
+        <span class="text-amber-600">排队中 <span id="queued-tasks">0</span></span>
+      </div>
     </div>
     
-    <div class="bg-white p-6 rounded shadow">
-      <div class="text-gray-500 text-sm">总任务数</div>
+    <div class="bg-white p-6 rounded shadow dark:bg-gray-800 dark:text-gray-100">
+      <div class="text-gray-500 text-sm dark:text-gray-300">总任务数</div>
       <div class="text-3xl font-bold mt-2" id="total-tasks">0</div>
     </div>
     
-    <div class="bg-white p-6 rounded shadow">
-      <div class="text-gray-500 text-sm">成功率</div>
+    <div class="bg-white p-6 rounded shadow dark:bg-gray-800 dark:text-gray-100">
+      <div class="text-gray-500 text-sm dark:text-gray-300">成功率</div>
       <div class="text-3xl font-bold mt-2">
         <span id="success-rate">0</span>%
       </div>
     </div>
     
-    <div class="bg-white p-6 rounded shadow">
-      <div class="text-gray-500 text-sm">平均耗时</div>
+    <div class="bg-white p-6 rounded shadow dark:bg-gray-800 dark:text-gray-100">
+      <div class="text-gray-500 text-sm dark:text-gray-300">平均耗时</div>
       <div class="text-3xl font-bold mt-2">
         <span id="avg-duration">0</span>s
       </div>
@@ -34,25 +38,26 @@
   </div>
 
   <!-- 活跃任务列表 -->
-  <div class="bg-white rounded shadow">
-    <div class="p-4 border-b flex justify-between items-center">
-      <h3 class="text-lg font-bold">活跃任务</h3>
-      <div class="text-sm text-gray-500">
+  <div class="bg-white rounded shadow dark:bg-gray-800 dark:border-gray-700">
+    <div class="p-4 border-b flex justify-between items-center dark:border-gray-700">
+      <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">活跃任务</h3>
+      <div class="text-sm text-gray-500 dark:text-gray-300">
         最后更新: <span id="last-update">--</span>
       </div>
     </div>
     <table class="w-full">
-      <thead class="bg-gray-50">
+      <thead class="bg-gray-50 dark:bg-gray-700 dark:text-gray-200">
         <tr>
           <th class="px-4 py-2 text-left">文本ID</th>
           <th class="px-4 py-2 text-left">状态</th>
+          <th class="px-4 py-2 text-left">阶段</th>
           <th class="px-4 py-2 text-left">开始时间</th>
           <th class="px-4 py-2 text-left">已运行</th>
         </tr>
       </thead>
       <tbody id="active-list">
         <tr>
-          <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+          <td colspan="5" class="px-4 py-8 text-center text-gray-400 dark:text-gray-500">
             暂无活跃任务
           </td>
         </tr>
@@ -85,12 +90,14 @@ async function updateStats() {
     document.getElementById('total-tasks').textContent = data.total_tasks;
     document.getElementById('success-rate').textContent = data.success_rate;
     document.getElementById('avg-duration').textContent = data.avg_duration;
+    document.getElementById('running-tasks').textContent = data.running_tasks;
+    document.getElementById('queued-tasks').textContent = data.queued_tasks;
     
     const tbody = document.getElementById('active-list');
     if (data.active_list.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+          <td colspan="5" class="px-4 py-8 text-center text-gray-400 dark:text-gray-500">
             暂无活跃任务
           </td>
         </tr>
@@ -100,12 +107,17 @@ async function updateStats() {
         <tr class="border-t">
           <td class="px-4 py-2">#${task.text_id}</td>
           <td class="px-4 py-2">
-            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
+            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm dark:bg-blue-900/40 dark:text-blue-200">
               ${task.status}
             </span>
           </td>
-          <td class="px-4 py-2">${formatTime(task.start_time)}</td>
-          <td class="px-4 py-2">${formatDuration(task.duration)}</td>
+          <td class="px-4 py-2">
+            <span class="px-2 py-1 rounded text-sm ${task.stage === 'running' ? 'bg-green-100 text-green-800' : (task.stage === 'queued' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-800')}">
+              ${task.stage}
+            </span>
+          </td>
+          <td class="px-4 py-2 text-gray-700 dark:text-gray-200">${formatTime(task.start_time)}</td>
+          <td class="px-4 py-2 text-gray-700 dark:text-gray-200">${formatDuration(task.duration)}</td>
         </tr>
       `).join('');
     }
@@ -120,7 +132,5 @@ updateStats();
 setInterval(updateStats, 5000);
 </script>
 {% endblock %}
-
-
 
 

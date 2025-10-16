@@ -6,6 +6,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import threading
 import time
+from redis import Redis, ConnectionPool
+from redis.exceptions import RedisError
 from .config.logging_config import setup_logging, get_logger, add_memory_handler
 
 engine = None
@@ -112,8 +114,10 @@ def create_app() -> Flask:
     # TTS client
     from .tts_client import VolcTtsClient
     from .services import TTSService, TaskService, AudioService
-    from .infrastructure.monitoring import TaskMonitor
-    from .config.settings import TTSSettings, PublicSettings
+    from .services.task_service import configure_tts_concurrency
+    from .infrastructure.monitoring import InMemoryTaskMonitor, TaskMonitorProtocol
+    from .infrastructure.redis_monitor import RedisTaskMonitor
+    from .config.settings import TTSSettings, PublicSettings, RedisSettings
     
     # TTS配置
     tts_settings = TTSSettings.from_config(cfg)
@@ -132,9 +136,39 @@ def create_app() -> Flask:
         'retry_delay': tts_settings.retry_delay,
     })
     
-    # 监控服务
-    monitor = TaskMonitor()
-    
+    # Redis 监控
+    redis_client = None
+    redis_settings = RedisSettings.from_config(cfg)
+    monitor: TaskMonitorProtocol
+
+    if redis_settings.enabled:
+        try:
+            connection_pool = ConnectionPool.from_url(
+                redis_settings.url,
+                max_connections=redis_settings.max_connections,
+                decode_responses=True
+            )
+            redis_client = Redis(connection_pool=connection_pool)
+            redis_client.ping()
+            monitor = RedisTaskMonitor(redis_client)
+            app.config['MONITOR_MODE'] = 'redis'
+        except RedisError as exc:
+            logger.warning(f"Redis 不可用，回退到内存模式: {exc}")
+            redis_client = None
+            monitor = InMemoryTaskMonitor()
+            app.config['MONITOR_MODE'] = 'memory'
+    else:
+        monitor = InMemoryTaskMonitor()
+        app.config['MONITOR_MODE'] = 'memory'
+
+    system_cfg = cfg.get('SYSTEM', {})
+    global_limit = int(system_cfg.get('max_concurrent_tasks', 8))
+    per_worker_limit = int(system_cfg.get('per_worker_tts_limit', max(1, min(global_limit, 2))))
+    configure_tts_concurrency(
+        redis_client if app.config['MONITOR_MODE'] == 'redis' else None,
+        global_limit=global_limit,
+        fallback_limit=per_worker_limit
+    )
     # 任务服务
     task_service = TaskService(tts_service, app.config['OSS_CLIENT'], monitor)
     
@@ -147,6 +181,7 @@ def create_app() -> Flask:
     app.config['TASK_SERVICE'] = task_service
     app.config['AUDIO_SERVICE'] = audio_service
     app.config['MONITOR'] = monitor
+    app.config['REDIS'] = redis_client
     
     # 公开配置（可暴露给前端）
     public_settings = PublicSettings.from_config(cfg)
@@ -157,7 +192,7 @@ def create_app() -> Flask:
     app.register_blueprint(main_bp)
 
     # 后台超时检查线程，避免任务卡住无终态
-    def _timeout_watcher(mon: TaskMonitor, interval: int = 30):
+    def _timeout_watcher(mon: TaskMonitorProtocol, interval: int = 30):
         while True:
             try:
                 mon.check_timeouts()

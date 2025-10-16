@@ -4,28 +4,95 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TTS火山版 · TTS_VOCL</title>
+  <script>
+    tailwind = window.tailwind || {};
+    tailwind.config = {
+      darkMode: 'class'
+    };
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    const themeScript = (() => {
+      const storageKey = 'tts-theme';
+      const root = document.documentElement;
+      const applyTheme = (mode) => {
+        root.dataset.theme = mode;
+        if (mode === 'dark') {
+          root.classList.add('dark');
+        } else {
+          root.classList.remove('dark');
+        }
+      };
+      const getPreferred = () => {
+        const stored = localStorage.getItem(storageKey);
+        if (stored && ['light', 'dark', 'system'].includes(stored)) {
+          return stored;
+        }
+        return 'system';
+      };
+      const resolveTheme = (mode) => {
+        if (mode === 'system') {
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        return mode;
+      };
+      const setTheme = (mode) => {
+        localStorage.setItem(storageKey, mode);
+        applyTheme(resolveTheme(mode));
+        window.dispatchEvent(new CustomEvent('tts-theme-change', { detail: { mode, applied: resolveTheme(mode) }}));
+      };
+      const init = () => {
+        const preferred = getPreferred();
+        applyTheme(resolveTheme(preferred));
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (evt) => {
+          if (getPreferred() === 'system') {
+            applyTheme(evt.matches ? 'dark' : 'light');
+          }
+        });
+        window.setTheme = setTheme;
+        window.getThemePreference = getPreferred;
+        window.getResolvedTheme = () => resolveTheme(getPreferred());
+      };
+      return { init };
+    })();
+    themeScript.init();
+  </script>
 </head>
-<body class="h-screen bg-gray-50 text-gray-900">
+<body class="h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
   <div class="flex h-full">
-    <aside class="w-64 bg-white border-r border-gray-200 p-4">
+    <aside class="w-64 bg-white border-r border-gray-200 p-4 dark:bg-gray-800 dark:border-gray-700">
       <h1 class="text-xl font-bold mb-6">TTS火山版</h1>
       <nav class="space-y-2">
-        <a href="/" class="block px-3 py-2 rounded hover:bg-gray-100">文本资源库</a>
-        <a href="/audios" class="block px-3 py-2 rounded hover:bg-gray-100">音频资源库</a>
-        <a href="/upload" class="block px-3 py-2 rounded hover:bg-gray-100">上传文本</a>
-        <a href="/settings" class="block px-3 py-2 rounded hover:bg-gray-100">系统设置</a>
-        <!-- <a href="/monitor" class="block px-3 py-2 rounded hover:bg-gray-100">系统监控</a> -->
+        <a href="/" class="block px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">文本资源库</a>
+        <a href="/audios" class="block px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">音频资源库</a>
+        <a href="/upload" class="block px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">上传文本</a>
+        <a href="/settings" class="block px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">系统设置</a>
+        <a href="/monitor" class="block px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">系统监控</a>
       </nav>
     </aside>
-    <main class="flex-1 overflow-auto">
+    <main class="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
       {% block content %}{% endblock %}
     </main>
   </div>
   <!-- 全局状态栏容器 -->
-  <div id="app-status-bar" class="fixed bottom-0 left-0 right-0 bg-gray-800 text-gray-100 text-xs px-3 py-2 border-t border-gray-700 hidden" style="z-index:1000;">
+  <div id="app-status-bar" class="fixed bottom-0 left-0 right-0 bg-gray-800 text-gray-100 text-xs px-3 py-2 border-t border-gray-700 hidden dark:bg-gray-900 dark:text-gray-100 dark:border-gray-600" style="z-index:1000;">
     <span class="font-semibold">状态</span>: 就绪
   </div>
+  <script>
+    (function setupThemeSelect() {
+      const select = document.getElementById('theme-select');
+      if (!select) return;
+      const applySelection = () => {
+        const pref = window.getThemePreference ? window.getThemePreference() : 'system';
+        select.value = pref;
+      };
+      applySelection();
+      select.addEventListener('change', () => {
+        window.setTheme(select.value);
+      });
+      window.addEventListener('tts-theme-change', applySelection);
+    })();
+  </script>
   <script src="/static/js/statusbar.js"></script>
   {% block extra_scripts %}{% endblock %}
 </body>

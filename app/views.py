@@ -572,18 +572,30 @@ def monitor_stats():
         
         # 获取活跃任务详情
         active_list = []
+        queued_tasks = 0
+        running_tasks = 0
+        now_ts = time.time()
         for text_id in active_tasks:
             task_status = monitor.get_task_status(text_id)
-            if task_status:
-                active_list.append({
-                    'text_id': text_id,
-                    'status': task_status['status'],
-                    'start_time': task_status.get('start_time', 0),
-                    'duration': int(time.time() - task_status.get('start_time', time.time()))
-                })
-        
+            if not task_status:
+                continue
+            stage = task_status.get('stage', 'queued')
+            if stage == 'queued':
+                queued_tasks += 1
+            elif stage == 'running':
+                running_tasks += 1
+            active_list.append({
+                'text_id': text_id,
+                'status': task_status['status'],
+                'stage': stage,
+                'start_time': task_status.get('start_time', 0),
+                'duration': int(now_ts - task_status.get('start_time', now_ts))
+            })
+
         return jsonify({
             'active_tasks': len(active_tasks),
+            'queued_tasks': queued_tasks,
+            'running_tasks': running_tasks,
             'max_concurrent': max_concurrent,
             'total_tasks': total,
             'success_rate': round(success_rate, 1),

@@ -2,18 +2,18 @@
 {% block content %}
 <div class="p-6 space-y-4">
   <div class="flex items-center justify-between">
-    <h2 class="text-lg font-semibold">文本资源库</h2>
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">文本资源库</h2>
     <form class="flex items-center gap-2 flex-wrap" method="get" action="/">
-      <input type="text" name="q" value="{{ q }}" placeholder="搜索标题/上传者" class="border rounded px-3 py-2 min-w-[180px]" />
-      <select name="order" class="border rounded px-3 py-2 bg-white">
+      <input type="text" name="q" value="{{ q }}" placeholder="搜索标题/上传者" class="border rounded px-3 py-2 min-w-[180px] bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100" />
+      <select name="order" class="border rounded px-3 py-2 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100">
         <option value="desc" {% if order=='desc' %}selected{% endif %}>时间降序</option>
         <option value="asc" {% if order=='asc' %}selected{% endif %}>时间升序</option>
       </select>
       
       <!-- 音频状态筛选 -->
       <div class="flex items-center gap-1">
-        <label class="text-sm text-gray-600">音频:</label>
-        <select name="audio_filter" onchange="this.form.submit()" class="border rounded px-3 py-2 bg-white">
+        <label class="text-sm text-gray-600 dark:text-gray-300">音频:</label>
+        <select name="audio_filter" onchange="this.form.submit()" class="border rounded px-3 py-2 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100">
           <option value="all" {% if audio_filter == 'all' %}selected{% endif %}>全部</option>
           <option value="generated" {% if audio_filter == 'generated' %}selected{% endif %}>已生成</option>
           <option value="not_generated" {% if audio_filter == 'not_generated' %}selected{% endif %}>未生成</option>
@@ -27,20 +27,20 @@
   </div>
 
   <!-- 上半部分：文本列表 -->
-  <div class="bg-white border rounded p-4">
+  <div class="bg-white border rounded p-4 dark:bg-gray-800 dark:border-gray-700">
     <div class="space-y-3">
       {% for it in items %}
-      <div class="text-item-row flex items-center justify-between p-3 border rounded" 
+      <div class="text-item-row flex items-center justify-between p-3 border rounded dark:border-gray-700" 
            data-text-id="{{ it.id }}"
            {% if it.id in task_status_map %}data-task-status="{{ task_status_map[it.id].status }}"{% endif %}>
         <div class="flex items-center gap-3">
           <div>
-            <div class="font-medium">
+            <div class="font-medium text-gray-900 dark:text-gray-100">
               <a class="hover:underline" href="/?q={{ q }}&order={{ order }}&audio_filter={{ audio_filter }}&page={{ page }}&selected_id={{ it.id }}">{{ it.title }}</a>
             </div>
-            <div class="text-sm text-gray-500">用户ID {{ it.user_id }} · {{ it.created_at }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">用户ID {{ it.user_id }} · {{ it.created_at }}</div>
           </div>
-          <a class="text-blue-600 text-sm" href="{{ pub_url(it.oss_object_key) }}" download>下载文本</a>
+          <a class="text-blue-600 dark:text-blue-300 text-sm" href="{{ pub_url(it.oss_object_key) }}" download>下载文本</a>
         </div>
         <!-- 🆕 添加唯一容器ID，用于局部刷新 -->
         <div id="audio-container-{{ it.id }}" class="flex items-center gap-3 flex-wrap justify-end">
@@ -69,7 +69,7 @@
             {% endfor %}
           {% elif it.id in task_status_map and task_status_map[it.id].status == 'processing' %}
             <!-- 情况2: 任务进行中 → 显示处理状态（不可点击） -->
-            <div class="flex items-center gap-2 text-gray-500">
+            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-300">
               <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -93,19 +93,19 @@
     <!-- 分页 -->
     <div class="mt-4 flex justify-end gap-2">
       {% if page > 1 %}
-      <a class="px-3 py-1 border rounded" href="/?q={{ q }}&order={{ order }}&audio_filter={{ audio_filter }}&page={{ page-1 }}">上一页</a>
+      <a class="px-3 py-1 border rounded dark:border-gray-600 dark:text-gray-100" href="/?q={{ q }}&order={{ order }}&audio_filter={{ audio_filter }}&page={{ page-1 }}">上一页</a>
       {% endif %}
-      <a class="px-3 py-1 border rounded" href="/?q={{ q }}&order={{ order }}&audio_filter={{ audio_filter }}&page={{ page+1 }}">下一页</a>
+      <a class="px-3 py-1 border rounded dark:border-gray-600 dark:text-gray-100" href="/?q={{ q }}&order={{ order }}&audio_filter={{ audio_filter }}&page={{ page+1 }}">下一页</a>
     </div>
   </div>
 
   <!-- 下半部分：选中文本只读预览区 -->
-  <div class="bg-white border rounded p-4 min-h-[240px]">
-    <div class="text-sm text-gray-500 mb-2">选中文本预览（只读）</div>
+  <div class="bg-white border rounded p-4 min-h-[240px] dark:bg-gray-800 dark:border-gray-700">
+    <div class="text-sm text-gray-500 dark:text-gray-300 mb-2">选中文本预览（只读）</div>
     {% if selected_text %}
-    <pre class="whitespace-pre-wrap text-sm">{{ selected_text.content }}</pre>
+    <pre class="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100">{{ selected_text.content }}</pre>
     {% else %}
-    <pre class="whitespace-pre-wrap text-sm">（选择具体文本后展示）</pre>
+    <pre class="whitespace-pre-wrap text-sm text-gray-500 dark:text-gray-400">（选择具体文本后展示）</pre>
     {% endif %}
   </div>
 </div>
@@ -140,22 +140,17 @@
     .then(response => response.json())
     .then(data => {
       if (data.success) {
-        alert('✅ 任务已提交，正在重新生成音频...\n\n页面将自动刷新以查看处理状态。');
-        // 刷新页面
-        window.location.reload();
+        showToast('✅ 任务已提交，正在重新生成音频...', 'success');
+        setTimeout(() => window.location.reload(), 1200);
       } else {
-        // 显示错误信息
-        alert('❌ ' + (data.error || '提交失败'));
-        // 恢复按钮状态
+        showToast('❌ ' + (data.error || '提交失败'), 'error');
         btn.disabled = false;
         btn.textContent = '重新生成音频';
         btn.className = 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors';
       }
     })
     .catch(error => {
-      // 网络错误
-      alert('❌ 网络错误: ' + error.message);
-      // 恢复按钮状态
+      showToast('❌ 网络错误: ' + error.message, 'error');
       btn.disabled = false;
       btn.textContent = '重新生成音频';
       btn.className = 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors';
@@ -173,7 +168,7 @@
     const btn = document.getElementById('del-btn-' + audioId);
     
     if (!container || !btn) {
-      alert('❌ 页面错误：找不到相关元素');
+      showToast('❌ 页面错误：找不到相关元素', 'error');
       return;
     }
     
@@ -225,7 +220,7 @@
     .catch(error => {
       // 错误：恢复原状
       container.innerHTML = originalHTML;
-      alert('❌ 删除失败: ' + error.message);
+      showToast('❌ 删除失败: ' + error.message, 'error');
     });
   }
 

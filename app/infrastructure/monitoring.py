@@ -8,7 +8,7 @@ import logging
 import hashlib
 import threading
 from collections import defaultdict
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable, Protocol
 from enum import Enum
 from dataclasses import dataclass
 
@@ -31,9 +31,26 @@ class TaskInfo:
     audio_url: Optional[str] = None
     idempotency_key: Optional[str] = None
     filename: Optional[str] = None
+    stage: str = "queued"
 
-class TaskMonitor:
-    """任务监控器 - 支持SSE推送和强幂等"""
+class TaskMonitorProtocol(Protocol):
+    def start_task(self, text_id: int, text_content: str) -> bool: ...
+    def complete_task(self, text_id: int, audio_url: str, filename: Optional[str] = None) -> None: ...
+    def fail_task(self, text_id: int, error_message: str) -> None: ...
+    def timeout_task(self, text_id: int) -> None: ...
+    def get_task_status(self, text_id: int) -> Optional[Dict[str, Any]]: ...
+    def add_sse_listener(self, text_id: int, listener: Callable): ...
+    def remove_sse_listener(self, text_id: int, listener: Callable): ...
+    def check_timeouts(self) -> None: ...
+    def get_stats(self) -> Dict[str, Any]: ...
+    def get_active_tasks(self) -> List[int]: ...
+    def link_task(self, follower_text_id: int, leader_text_id: int) -> None: ...
+    def find_existing_by_content(self, text_content: str) -> Optional[Dict[str, Any]]: ...
+    def update_stage(self, text_id: int, stage: str) -> None: ...
+
+
+class InMemoryTaskMonitor:
+    """内存任务监控器 - 支持SSE推送和强幂等"""
     
     def __init__(self):
         self.stats = defaultdict(int)
@@ -100,12 +117,14 @@ class TaskMonitor:
                     text_id=follower_text_id,
                     status=TaskStatus.PROCESSING,
                     start_time=time.time(),
-                    idempotency_key=None
+                    idempotency_key=None,
+                    stage="running"
                 )
                 # 给 follower 发送 started
                 self._notify_listeners(follower_text_id, "started", {
                     'text_id': follower_text_id,
-                    'status': TaskStatus.PROCESSING.value
+                    'status': TaskStatus.PROCESSING.value,
+                    'stage': 'running'
                 })
     
     def start_task(self, text_id: int, text_content: str) -> bool:
@@ -148,32 +167,34 @@ class TaskMonitor:
             else:
                 logger.info(f"当前text_id无现有任务，可以创建新任务")
             
-            # 创建新任务
-            logger.info(f"创建新任务: text_id={text_id}")
-            task_info = TaskInfo(
-                text_id=text_id,
-                status=TaskStatus.PROCESSING,
-                start_time=time.time(),
-                idempotency_key=idempotency_key
-            )
-            
-            self.tasks[text_id] = task_info
-            self.idempotency_map[idempotency_key] = text_id
-            self.stats['tasks_started'] += 1
-            
-            logger.info(f"任务创建成功: text_id={text_id}")
-            logger.info(f"当前任务总数: {len(self.tasks)}")
-            logger.info(f"当前统计: {dict(self.stats)}")
-            
-            # 通知监听器
-            logger.info(f"通知监听器: text_id={text_id}")
-            self._notify_listeners(text_id, "started", {
-                "text_id": text_id,
-                "status": TaskStatus.PROCESSING.value
-            })
-            
-            logger.info(f"=== 监控器start_task完成，返回True ===")
-            return True
+        # 创建新任务
+        logger.info(f"创建新任务: text_id={text_id}")
+        task_info = TaskInfo(
+            text_id=text_id,
+            status=TaskStatus.PROCESSING,
+            start_time=time.time(),
+            idempotency_key=idempotency_key,
+            stage="queued"
+        )
+        
+        self.tasks[text_id] = task_info
+        self.idempotency_map[idempotency_key] = text_id
+        self.stats['tasks_started'] += 1
+        
+        logger.info(f"任务创建成功: text_id={text_id}")
+        logger.info(f"当前任务总数: {len(self.tasks)}")
+        logger.info(f"当前统计: {dict(self.stats)}")
+        
+        # 通知监听器
+        logger.info(f"通知监听器: text_id={text_id}")
+        self._notify_listeners(text_id, "started", {
+            "text_id": text_id,
+            "status": TaskStatus.PROCESSING.value,
+            "stage": "queued"
+        })
+        
+        logger.info(f"=== 监控器start_task完成，返回True ===")
+        return True
     
     def complete_task(self, text_id: int, audio_url: str, filename: Optional[str] = None):
         """完成任务"""
@@ -187,6 +208,7 @@ class TaskMonitor:
             task_info.completed_time = time.time()
             task_info.audio_url = audio_url
             task_info.filename = filename
+            task_info.stage = "done"
             
             duration = task_info.completed_time - task_info.start_time
             self.stats['tasks_completed'] += 1
@@ -198,6 +220,7 @@ class TaskMonitor:
             self._notify_listeners(text_id, "completed", {
                 "text_id": text_id,
                 "status": TaskStatus.COMPLETED.value,
+                "stage": "done",
                 "audio_url": audio_url,
                 "filename": filename,
                 "duration": duration
@@ -214,6 +237,7 @@ class TaskMonitor:
             task_info.status = TaskStatus.FAILED
             task_info.completed_time = time.time()
             task_info.error_message = error_message
+            task_info.stage = "done"
             
             duration = task_info.completed_time - task_info.start_time
             self.stats['tasks_failed'] += 1
@@ -225,6 +249,7 @@ class TaskMonitor:
             self._notify_listeners(text_id, "failed", {
                 "text_id": text_id,
                 "status": TaskStatus.FAILED.value,
+                "stage": "done",
                 "error_message": error_message,
                 "duration": duration
             })
@@ -239,6 +264,7 @@ class TaskMonitor:
             task_info.status = TaskStatus.TIMEOUT
             task_info.completed_time = time.time()
             task_info.error_message = "任务超时"
+            task_info.stage = "done"
             
             duration = task_info.completed_time - task_info.start_time
             self.stats['tasks_failed'] += 1
@@ -250,6 +276,7 @@ class TaskMonitor:
             self._notify_listeners(text_id, "timeout", {
                 "text_id": text_id,
                 "status": TaskStatus.TIMEOUT.value,
+                "stage": "done",
                 "error_message": "任务超时",
                 "duration": duration
             })
@@ -268,13 +295,29 @@ class TaskMonitor:
                 "completed_time": task_info.completed_time,
                 "error_message": task_info.error_message,
                 "audio_url": task_info.audio_url,
-                "filename": task_info.filename
+                "filename": task_info.filename,
+                "stage": task_info.stage
             }
             
             if task_info.completed_time:
                 result["duration"] = task_info.completed_time - task_info.start_time
             
             return result
+
+    def update_stage(self, text_id: int, stage: str) -> None:
+        """更新任务阶段（queued/running/done）"""
+        with self.lock:
+            task_info = self.tasks.get(text_id)
+            if not task_info:
+                return
+            if task_info.stage == stage:
+                return
+            task_info.stage = stage
+            self._notify_listeners(text_id, "stage", {
+                "text_id": text_id,
+                "status": task_info.status.value,
+                "stage": stage
+            })
     
     def add_sse_listener(self, text_id: int, listener: Callable):
         """添加SSE监听器"""
@@ -337,3 +380,15 @@ class TaskMonitor:
         """记录错误 - 向后兼容"""
         self.stats['tasks_failed'] += 1
         logger.error(f"任务失败: task_id={task_id}, duration={duration:.2f}s, error={error}")
+
+
+# 保持向后兼容的别名
+TaskMonitor = InMemoryTaskMonitor
+
+__all__ = [
+    "TaskStatus",
+    "TaskInfo",
+    "TaskMonitorProtocol",
+    "InMemoryTaskMonitor",
+    "TaskMonitor",
+]

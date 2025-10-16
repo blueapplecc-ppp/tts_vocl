@@ -41,7 +41,7 @@ class TTSSettings:
                 'zh_female_mizai_v2_saturn_bigtts',
                 'zh_male_dayi_v2_saturn_bigtts'
             ]),
-            max_text_length=tts_config.get('max_text_length', 25000),
+            max_text_length=tts_config.get('max_text_length', 10000),
             max_round_length=tts_config.get('max_round_length', 250),
             max_retries=tts_config.get('max_retries', 3),
             retry_delay=tts_config.get('retry_delay', 5),
@@ -74,9 +74,26 @@ class PublicSettings:
         return cls(
             available_speakers=bigtts_speakers,
             dialogue_format_example="婷婷（活泼感性）：对话内容\n小西（逻辑严谨）：对话内容",
-            max_text_length=tts_config.get('max_text_length', 25000),
+            max_text_length=tts_config.get('max_text_length', 10000),
             max_round_length=tts_config.get('max_round_length', 250),
             supported_formats=tts_config.get('supported_formats', ['.txt']),
             max_concurrent_tasks=system_config.get('max_concurrent_tasks', 5),
             task_timeout=system_config.get('task_timeout', 300),
+        )
+
+
+@dataclass
+class RedisSettings:
+    """Redis 配置"""
+    url: str = "redis://127.0.0.1:6379/0"
+    max_connections: int = 10
+    enabled: bool = True
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "RedisSettings":
+        redis_cfg = config.get("REDIS", {})
+        return cls(
+            url=redis_cfg.get("URL", cls.url),
+            max_connections=int(redis_cfg.get("MAX_CONNECTIONS", cls.max_connections)),
+            enabled=bool(str(redis_cfg.get("ENABLED", "true")).lower() == "true"),
         )

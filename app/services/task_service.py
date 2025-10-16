@@ -7,8 +7,11 @@ import time
 import asyncio
 import logging
 import threading
+import uuid
 from sqlalchemy.exc import IntegrityError
 from typing import Dict, Any, Optional
+from redis import Redis
+
 from ..models import get_session, TtsText, TtsAudio
 from .tts_service import TTSServiceInterface
 from .audio_service import AudioService
@@ -16,9 +19,145 @@ from ..exceptions import ConcurrencyQuotaExceeded
 
 logger = logging.getLogger(__name__)
 
-# 限制同时发起的TTS并发（基础限流）
-# 4 workers × 2 = 8 全局并发，避免触发火山引擎配额限制
-_TTS_CONCURRENCY_SEMA = threading.BoundedSemaphore(value=2)
+
+class DistributedSemaphore:
+    """Redis 分布式信号量，兼容本地回退."""
+
+    _ACQUIRE_SCRIPT = """
+    redis.call('zremrangebyscore', KEYS[1], '-inf', ARGV[2])
+    local current = redis.call('zcard', KEYS[1])
+    if current >= tonumber(ARGV[1]) then
+        return 0
+    end
+    redis.call('zadd', KEYS[1], ARGV[2] + ARGV[3], ARGV[4])
+    redis.call('pexpire', KEYS[1], ARGV[3])
+    return 1
+    """
+
+    _RELEASE_SCRIPT = """
+    local removed = redis.call('zrem', KEYS[1], ARGV[1])
+    if removed > 0 then
+        local remaining = redis.call('zcard', KEYS[1])
+        if remaining > 0 then
+            redis.call('pexpire', KEYS[1], ARGV[2])
+        else
+            redis.call('del', KEYS[1])
+        end
+    end
+    return removed
+    """
+
+    def __init__(
+        self,
+        name: str,
+        redis_client: Optional[Redis],
+        limit: int,
+        fallback_limit: int,
+        token_ttl: int = 900,
+        sleep_interval: float = 0.2
+    ):
+        self.name = name
+        self.redis = redis_client
+        self.limit = limit
+        self.fallback_limit = fallback_limit
+        self.token_ttl = max(token_ttl, 60)
+        self.sleep_interval = sleep_interval
+        self._redis_key = f"semaphore:{self.name}"
+        self._local_sema = threading.BoundedSemaphore(value=fallback_limit if redis_client is None else limit)
+        self._local_lock = threading.Lock()
+        self._tokens = threading.local()
+
+        if self.redis:
+            self._acquire_script = self.redis.register_script(self._ACQUIRE_SCRIPT)
+            self._release_script = self.redis.register_script(self._RELEASE_SCRIPT)
+
+    def acquire(self):
+        if not self.redis:
+            self._local_sema.acquire()
+            self._push_token("local")
+            return
+
+        token = uuid.uuid4().hex
+        while True:
+            now_ms = int(time.time() * 1000)
+            expire_ms = self.token_ttl * 1000
+            try:
+                result = self._acquire_script(
+                    keys=[self._redis_key],
+                    args=[self.limit, now_ms, expire_ms, token]
+                )
+            except Exception as exc:
+                logger.error(f"Redis 信号量获取失败，回退到等待: {exc}")
+                time.sleep(self.sleep_interval)
+                continue
+
+            if int(result or 0) == 1:
+                self._local_sema.acquire()
+                self._push_token(token)
+                return
+
+            time.sleep(self.sleep_interval)
+
+    def release(self):
+        token = self._pop_token()
+        if not token:
+            logger.warning("DistributedSemaphore.release 未找到 token，忽略")
+            return
+
+        if not self.redis or token == "local":
+            self._local_sema.release()
+            return
+
+        try:
+            self._release_script(
+                keys=[self._redis_key],
+                args=[token, self.token_ttl * 1000]
+            )
+        except Exception as exc:
+            logger.error(f"Redis 信号量释放失败: {exc}")
+        finally:
+            self._local_sema.release()
+
+    def _push_token(self, token: str):
+        if not hasattr(self._tokens, "stack"):
+            self._tokens.stack = []
+        self._tokens.stack.append(token)
+
+    def _pop_token(self) -> Optional[str]:
+        stack = getattr(self._tokens, "stack", None)
+        if not stack:
+            return None
+        return stack.pop()
+
+    @property
+    def _value(self) -> int:
+        return self.limit if self.redis else self.fallback_limit
+
+
+# 默认情况下使用每 worker 2 个并发（兼容旧逻辑）
+_TTS_CONCURRENCY_SEMA = DistributedSemaphore(
+    name="tts",
+    redis_client=None,
+    limit=2,
+    fallback_limit=2
+)
+
+
+def configure_tts_concurrency(
+    redis_client: Optional[Redis],
+    global_limit: int = 8,
+    fallback_limit: int = 2,
+    token_ttl: int = 900
+):
+    """在应用初始化时配置TTS并发控制"""
+    global _TTS_CONCURRENCY_SEMA
+    _TTS_CONCURRENCY_SEMA = DistributedSemaphore(
+        name="tts",
+        redis_client=redis_client,
+        limit=global_limit,
+        fallback_limit=fallback_limit,
+        token_ttl=token_ttl
+    )
 
 class TaskService:
     """任务服务 - 支持强幂等和超时处理"""
@@ -218,7 +357,11 @@ class TaskService:
                 # 生成音频
                 logger.info(f"步骤4: 开始TTS音频生成 - text_id={text_id}")
                 logger.info(f"调用TTS服务: text_length={len(text_row.content)}")
+                if self.monitor:
+                    self.monitor.update_stage(text_id, "queued")
                 _TTS_CONCURRENCY_SEMA.acquire()
+                if self.monitor:
+                    self.monitor.update_stage(text_id, "running")
                 try:
                     audio_data = await self.tts_service.synthesize_text(text_row.content, text_id=text_id)
                 finally:

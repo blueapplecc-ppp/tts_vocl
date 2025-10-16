@@ -1,32 +1,32 @@
 {% extends 'layout.html' %}
 {% block content %}
 <div class="p-6 space-y-4">
-  <h2 class="text-lg font-semibold">上传文本</h2>
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">上传文本</h2>
 
-  <div class="bg-white border rounded p-4 space-y-4">
+  <div class="bg-white border rounded p-4 space-y-4 dark:bg-gray-800 dark:border-gray-700">
     <form id="upload-form" class="space-y-3" method="post" action="/upload" enctype="multipart/form-data">
-      <div id="drop-zone" class="border-2 border-dashed rounded p-6 text-center text-gray-500 cursor-pointer hover:bg-gray-50">
+      <div id="drop-zone" class="border-2 border-dashed rounded p-6 text-center text-gray-500 cursor-pointer hover:bg-gray-50 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700/50">
         将 .txt 拖拽到此处，或点击选择（≤ 5MB）
         <input type="file" id="file-input" name="file" accept=".txt" class="hidden" />
       </div>
       <div>
-        <label class="block text-sm text-gray-600 mb-1">标题 <span class="text-red-500">*</span></label>
-        <input type="text" id="title-input" name="title" class="w-full border rounded px-3 py-2" placeholder="请输入标题（1-80字符）" required />
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">标题 <span class="text-red-500">*</span></label>
+        <input type="text" id="title-input" name="title" class="w-full border rounded px-3 py-2 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" placeholder="请输入标题（1-80字符）" required />
         <div id="title-error" class="text-red-500 text-sm mt-1 hidden"></div>
         <div id="title-success" class="text-green-500 text-sm mt-1 hidden">✓ 标题可用</div>
       </div>
       
       <!-- 音色选择（暂时禁用，作为扩展功能） -->
       <div>
-        <label class="block text-sm text-gray-600 mb-1">音色选择</label>
-        <select name="voice" class="w-full border rounded px-3 py-2 bg-gray-100" disabled>
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">音色选择</label>
+        <select name="voice" class="w-full border rounded px-3 py-2 bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" disabled>
           <option value="dialogue_mode">对话模式（自动分配）</option>
         </select>
-        <p class="text-xs text-gray-500 mt-1">当前为对话模式，系统自动分配男女声</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">当前为对话模式，系统自动分配男女声</p>
       </div>
       
       <!-- 对话格式说明 -->
-      <div class="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+      <div class="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-200">
         <strong>对话格式说明：</strong><br>
         请使用以下格式输入对话：<br>
         <code>人名（描述）：对话内容</code> 或 <code>人名：对话内容</code><br><br>
@@ -36,19 +36,22 @@
         <strong>注意：</strong>第一个出现的人名将使用女声，第二个使用男声。
       </div>
       
-      <div class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+      <div class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-200">
         提示：点击生成音频后，不可更改文本
       </div>
       <div>
-        <label class="block text-sm text-gray-600 mb-1">对话内容 <span class="text-red-500">*</span></label>
-        <textarea id="content-textarea" name="content" class="w-full h-64 border rounded px-3 py-2" placeholder="可直接粘贴对话内容，或上传文件后自动填充……" required></textarea>
+        <label class="block text-sm text-gray-600 dark:text-gray-300 mb-1">对话内容 <span class="text-red-500">*</span></label>
+        <textarea id="content-textarea" name="content" class="w-full h-64 border rounded px-3 py-2 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" placeholder="可直接粘贴对话内容，或上传文件后自动填充……" required></textarea>
         <div id="content-error" class="text-red-500 text-sm mt-1 hidden"></div>
-        <div class="text-xs text-gray-500 mt-1">
-          支持直接粘贴文本或上传文件。格式：<code>人名（描述）：对话内容</code> 或 <code>人名：对话内容</code>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1 space-y-1">
+          <div>支持直接粘贴文本或上传文件。格式：<code>人名（描述）：对话内容</code> 或 <code>人名：对话内容</code></div>
+          <div>单轮不超过 250 字符，总文本长度不超过 10000 字符，参考链接
+            <a href="https://www.volcengine.com/docs/6561/1668014#_2-%E6%8E%A5%E5%8F%A3%E8%AF%B4%E6%98%8E" class="text-blue-600 dark:text-blue-300 underline" target="_blank" rel="noopener">火山引擎接口文档</a>。
+          </div>
         </div>
       </div>
       <div class="flex justify-end">
-        <button class="px-4 py-2 bg-blue-600 text-white rounded" type="submit">生成音频</button>
+        <button class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" type="submit">生成音频</button>
       </div>
     </form>
     
@@ -200,7 +203,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // TTS API限制常量
-    const MAX_DIALOGUE_ROUND_LENGTH = 250;  // 单轮对话最大字符数
+    const MAX_DIALOGUE_ROUND_LENGTH = 250;  // 单轮对话最大字符数（火山接口限制）
+    const MAX_TEXT_TOTAL_LENGTH = 10000;    // 文本总长度上限（火山接口限制）
     const MIN_SPLIT_RATIO = 0.7;  // 最小分割比例
     
     // 检测对话内容是否可以被后端正确处理
@@ -245,6 +249,13 @@ document.addEventListener('DOMContentLoaded', function() {
         contentError.classList.add('hidden');
         
         if (!text) {
+            contentValid = false;
+            updateSubmitButton();
+            return;
+        }
+        if (text.length > MAX_TEXT_TOTAL_LENGTH) {
+            contentError.textContent = `总文本长度为 ${text.length} 字符，已超过接口上限 ${MAX_TEXT_TOTAL_LENGTH} 字符，请拆分后再提交。`;
+            contentError.classList.remove('hidden');
             contentValid = false;
             updateSubmitButton();
             return;
@@ -296,7 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
             contentError.classList.remove('hidden');
             contentValid = false;
         } else if (unhandleableIssue) {
-            contentError.innerHTML = `<span class="text-red-600">❌ 第${unhandleableIssue.line}行对话内容过长，超过${MAX_DIALOGUE_ROUND_LENGTH}字符，且无法自动分段<br><br>请在前${MAX_DIALOGUE_ROUND_LENGTH}字符内添加标点符号（。！？.!?）或手动分割为多轮对话。</span>`;
+            contentError.innerHTML = `<span class="text-red-600">❌ 第${unhandleableIssue.line}行对话内容过长，超过 ${MAX_DIALOGUE_ROUND_LENGTH} 字符，且无法自动分段<br><br>请在前 ${MAX_DIALOGUE_ROUND_LENGTH} 字符内添加标点符号（。！？.!?）或手动拆分成多轮对话。</span>`;
             contentError.classList.remove('hidden');
             contentValid = false;
         } else {

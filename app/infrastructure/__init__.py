@@ -3,8 +3,12 @@
 提供底层技术实现和工具
 """
 
-from .monitoring import TaskMonitor
+from .monitoring import TaskMonitor, InMemoryTaskMonitor, TaskMonitorProtocol
+from .redis_monitor import RedisTaskMonitor
 
 __all__ = [
-    'TaskMonitor'
+    'TaskMonitor',
+    'InMemoryTaskMonitor',
+    'RedisTaskMonitor',
+    'TaskMonitorProtocol'
 ]
